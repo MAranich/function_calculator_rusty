@@ -6,7 +6,6 @@ use crate::setup;
 /// All the valid characters that will separate tokens. 
 /// 
 /// The token lexemme is separated both righ before and right after the separator itself.
-/// 
 /// It is already pre-sorted so binary search can be used on them. 
 const SEPARATORS: [char; 14] = [
     ' ', '!', '%', '(', ')', '*', '+', '-', '/', '[', ']', '^', '{', '}',
@@ -543,7 +542,7 @@ pub fn evaluate_expression(input: String, calc: &mut Calculator, print_messages:
 
     let mut ast: AST = generate_ast(input, calc, print_messages)?; 
 
-    let final_result: Number = ast.evaluate()?;
+    let final_result: Number = ast.evaluate(None)?;
     if print_messages {
         //display result
         println!("\nEvaluated to: \t{:?}\n\n", final_result);

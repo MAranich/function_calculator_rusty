@@ -1,12 +1,12 @@
-//! This project allows the numerical evaluation of string expressions. 
-//! 
+//! This project allows the numerical evaluation of string expressions.
+//!
 //! ## Basic usage and example
-//! 
-//! The following code gives a bery basic example of the usage: 
+//!
+//! The following code gives a bery basic example of the usage:
 //! ```
-//! let input: String = String::from("4 -2+sqrt(sin(PI/2))**ln(1) + 1/cos(tan(exp(-2.2)))"); 
+//! let input: String = String::from("4 -2+sqrt(sin(PI/2))**ln(1) + 1/cos(tan(exp(-2.2)))");
 //! let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
-//! 
+//!
 //! match evaluate_expression(input, &mut calc, false) {
 //!     Ok(final_value) => {
 //!         println!("\nEvaluated to: \t{:?}\n", final_result);
@@ -14,21 +14,21 @@
 //!     Err(msg) => panic!("\n{}", msg),
 //! }
 //! ```
-//! After executing, it prints the following: 
+//! After executing, it prints the following:
 //! > Evaluated to:   4.0062213501365935
-//! 
-//! However, the program will also try to work with fractions when possible. 
-//! If we let input `"1/2 + 5/9"`, the printed message will be: 
+//!
+//! However, the program will also try to work with fractions when possible.
+//! If we let input `"1/2 + 5/9"`, the printed message will be:
 //! > Evaluated to:   19/18 ~= 1.0555555555555556
-//! 
-//! The project can be run with `cargo run -- "<expression>"`, where `<expression>` is 
+//!
+//! The project can be run with `cargo run -- "<expression>"`, where `<expression>` is
 //! your desired input.  
-//! 
+//!
 //! ***
-//! ## Operations and syntax: 
-//! 
-//! This project supports the following operations: 
-//! 
+//! ## Operations and syntax:
+//!
+//! This project supports the following operations:
+//!
 //! 1) Addition                         (using `+`, as in `"2+5"`)
 //! 2) Substraction and negation        (using `-`, as in `"3-5.5"` or in `"-sin(-2)"`)
 //! 3) Multiplication                   (using `*`, as in `"4*8"`)
@@ -46,39 +46,39 @@
 //! 15) Exponential                     (using `exp(x)`, as in `"exp(3)"`)
 //! 16) Natural logarithm               (using `ln(x)`, as in `"ln(e)"`)
 //! 17) Absolute value                  (using `abs(x)`, as in `"abs(-1)"`)
-//! 
-//! + All the functions can be combined and composed in any way as long as they are 
-//! mathematically correct and fullfill the syntax requirments. 
-//! 
-//! + Some operations have priority over others, such as multiplication over 
-//! addition. That means that `"2+5*3"` will be evaluated as `"2+(5*3)"`. To overwrite 
-//! the order parenthesis can be used `()`. 
-//! 
-//! + All the trigonometric functions work with radians. In order to use degrees, multiply your 
+//!
+//! + All the functions can be combined and composed in any way as long as they are
+//! mathematically correct and fullfill the syntax requirments.
+//!
+//! + Some operations have priority over others, such as multiplication over
+//! addition. That means that `"2+5*3"` will be evaluated as `"2+(5*3)"`. To overwrite
+//! the order parenthesis can be used `()`.
+//!
+//! + All the trigonometric functions work with radians. In order to use degrees, multiply your
 //! value by `DEG2RAD`, for example: `sin(90*DEG2RAD)`
-//! 
-//! + Only real values are supported (no complex values), therefore `"sqrt(-1)"` lies outside 
-//! the domains of the function and will return an error indicating the invalid 
-//! evaluation. 
-//! 
-//! + Division by 0 is not allowed. 
-//! 
-//! + Every parenthesis (any of `()`, `{}` and `[]` can also be used. They are 
-//! equivalent but have to match) must be closed. Therefore each parenthesys 
-//! symbol must have its correspondinc counterpart. 
-//! 
-//! + Spaces are ignored, you can add all you want or even remove them completly. 
-//! 
-//! + Remember that a [logarithm](https://en.wikipedia.org/wiki/Logarithm#Change_of_base) 
-//! in any base `b` can be expressed as `log_b(x) = (ln(x)/ln(b))` . 
-//! 
+//!
+//! + Only real values are supported (no complex values), therefore `"sqrt(-1)"` lies outside
+//! the domains of the function and will return an error indicating the invalid
+//! evaluation.
+//!
+//! + Division by 0 is not allowed.
+//!
+//! + Every parenthesis (any of `()`, `{}` and `[]` can also be used. They are
+//! equivalent but have to match) must be closed. Therefore each parenthesys
+//! symbol must have its correspondinc counterpart.
+//!
+//! + Spaces are ignored, you can add all you want or even remove them completly.
+//!
+//! + Remember that a [logarithm](https://en.wikipedia.org/wiki/Logarithm#Change_of_base)
+//! in any base `b` can be expressed as `log_b(x) = (ln(x)/ln(b))` .
+//!
 //! ***
-//! 
-//! ## Constants: 
-//! 
+//!
+//! ## Constants:
+//!
 //! The program will automatically translate some constants to it's corresponding
-//! numerical values. 
-//! 
+//! numerical values.
+//!
 //! 1)  [x]  PI              (equal to 3.141592653589793)
 //! 2)  [x]  RAD2DEG         (equal to 57.29577951308232 = 180 / PI)
 //! 3)  [x]  DEG2RAD         (equal to 0.0174532925199433 = PI / 180)
@@ -91,38 +91,35 @@
 //! 10) [ ]  elecprem        (equal to 0.0000000000088541878188 = 8.8541878188 * 10^-12, vacuum electric permittivity)
 //! 11) [ ]  magnprem        (equal to 0.00000125663706127 = 1.25663706127 * 10^-6, vacuum magnetic permeability)
 //! 12) [ ]  elecmass        (equal to 0.00000000000000000000000000000091093837139 = 9.1093837139 * 10^-31 kg, mass of the electron)
-//! 
-//! 
-//! Constants can be written on any combination of uppercase and lowercase letters. 
-//! Physical constants have [IS units](https://en.wikipedia.org/wiki/International_System_of_Units). 
-//! 
+//!
+//!
+//! Constants can be written on any combination of uppercase and lowercase letters.
+//! Physical constants have [IS units](https://en.wikipedia.org/wiki/International_System_of_Units).
+//!
 
-
-
-use std::{cell::RefCell, env, rc::Rc};
+use std::env;
 
 //#[allow(unused_parens)]
 
-/// All information regarding the datastructures. 
+/// All information regarding the datastructures.
 pub mod datastructures;
 
-/// Functions to process the string until evaluation. 
+/// Functions to process the string until evaluation.
 pub mod processing;
 
-/// Hardcoded data that other parts of the code use. 
+/// Hardcoded data that other parts of the code use.
 pub mod setup;
 
-/// ## Cotains the functions and constants that can be used. 
+/// ## Cotains the functions and constants that can be used.
 pub mod functions;
 
-/// All the testing. 
+/// All the testing.
 #[cfg(test)]
 mod tests;
 
-
 use crate::datastructures::*;
+use crate::processing::*;
 use functions::Constants;
-use crate::processing::*; 
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -149,22 +146,40 @@ fn main() {
     let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
 
     let ast: AST = match generate_ast(input, &mut calc, true) {
-        Ok(ret) => ret, 
+        Ok(ret) => ret,
         Err(msg) => panic!("\n{}", msg),
-    }; 
+    };
 
-    println!("\n\tThe generated AST: \n\n{:#?}\n\n", ast); 
+    println!("\n\tThe generated AST: \n\n{:#?}\n", ast.to_string());
 
-    println!("The AST contains variables: {}\n", ast.contains_variable()); 
+    let derivated: AST = match ast.derive() {
+        Ok(der) => {
+            println!("Unsimplified derivated AST: \n{}", der.to_string());
 
-    let ast_ref: Rc<RefCell<AST>> = Rc::new(RefCell::new(ast)); 
+            match der.simplify_expression() {
+                Ok(der_simp) => der_simp,
+                Err(e) => panic!("\nError while simplifying the derivated input: {}\n", e),
+            }
+        }
+        Err(e) => panic!("\nError while derivating input: {}\n", e),
+    };
+
+    println!(
+        "\n\tThe derivation of the AST: \n\n{:#?}\n",
+        derivated.to_string()
+    );
+
+    /*
+
+    println!("The AST contains variables: {}\n", ast.contains_variable());
+
+    let ast_ref: Rc<RefCell<AST>> = Rc::new(RefCell::new(ast));
     match AST::simplify_expression(Rc::clone(&ast_ref)) {
         Ok(_) => {},
         Err(msg) => panic!("\n{}", msg),
     }
 
-    println!("Simplified AST stringified: \n\n\t{}\n\n", ast_ref.borrow().to_string()); 
+    println!("Simplified AST stringified: \n\n\t{}\n\n", ast_ref.borrow().to_string());
 
-
-
+    */
 }

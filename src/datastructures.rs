@@ -1,6 +1,8 @@
 use core::fmt;
 use std::{cell::RefCell, collections::VecDeque, iter::zip, ops, rc::Rc, vec};
 
+use crate::functions::Functions;
+
 /// Represents the state that all [DFA] will start.
 const INITIAL_STATE: u16 = 1;
 
@@ -53,6 +55,7 @@ pub enum Number {
 /// The [AST] contains [Element] wich can be any of the following.
 #[derive(Debug, PartialEq, Clone)]
 pub enum Element {
+    Derive,
     Function(String),
     Add,
     Sub,
@@ -177,7 +180,7 @@ pub struct Calculator {
 ///
 /// It returns a Number or a String containing an explanation of the error.
 pub trait Evaluable {
-    fn evaluate(&mut self) -> Result<Number, String>;
+    fn evaluate(&mut self, x: Option<Number>) -> Result<Number, String>;
 }
 
 impl DFA {
@@ -829,7 +832,7 @@ impl AST {
             return true;
         }
 
-        let mut nodes: Vec<Rc<RefCell<AST>>> = vec![];
+        let mut nodes: Vec<Rc<RefCell<AST>>> = Vec::new();
         // Put all children in nodes
         for child in &self.children {
             nodes.push(Rc::clone(child));
@@ -857,7 +860,7 @@ impl AST {
         return false;
     }
 
-    /// Simplifies the parts of the tree that can be substitutes by the correspondent numerical value.
+    // Simplifies the parts of the tree that can be substitutes by the correspondent numerical value.
     /* pub fn simplify_expression(&mut self) -> Result<(), String> {
 
         //Idea: get the largest tree that does not contain any variable, evaluete it and substitute it.
@@ -895,8 +898,10 @@ impl AST {
     /// If expression contains no variables, call direcly `evaluate()` since it's more efficient.
     /// Will return an error if the expression is not valid (dividing by 0 or by
     /// evaluating a function outside it's domains).
-    pub fn simplify_expression(my_self: Rc<RefCell<AST>>) -> Result<(), String> {
-        let mut stack: Vec<Rc<RefCell<AST>>> = vec![my_self];
+    pub fn simplify_expression(self) -> Result<Self, String> {
+        let original_node: Rc<RefCell<AST>> = Rc::new(RefCell::new(self));
+
+        let mut stack: Vec<Rc<RefCell<AST>>> = vec![original_node.clone()];
 
         while let Some(node_rc) = stack.pop() {
             let mut node: std::cell::RefMut<AST> = node_rc.borrow_mut();
@@ -907,7 +912,7 @@ impl AST {
 
             if !Self::contains_variable(&node) {
                 // Simplify expression
-                let result: Number = node.evaluate()?;
+                let result: Number = node.evaluate(None)?;
                 node.value = Element::Number(result);
                 node.children.clear();
             } else {
@@ -918,18 +923,26 @@ impl AST {
             }
         }
 
-        return Ok(());
+        return Ok(Rc::try_unwrap(original_node)
+            .expect("Failed to unwrap Rc. ")
+            .into_inner());
     }
 
     /// Deep copies the [AST]
-    pub fn deep_copy(&self) -> Rc<RefCell<AST>> {
+    pub fn deep_copy(&self) -> Self {
         /* //Recursive:
-        Rc::new(RefCell::new(AST {
+        let mut childs: Vec<Rc<RefCell<AST>>> = Vec::with_capacity(self.children.len());
+
+        for child in self.children.iter() {
+            childs.push(Rc::new(RefCell::new(child.borrow().deep_copy())));
+        }
+
+        AST {
             value: self.value.clone(),
-            children: self.children.iter()
-                .map(|child| child.borrow().deep_copy())
-                .collect(),
-        }));
+            children: childs,
+        }
+
+        ////////////
 
         let ret: AST = AST::new(self.value.clone());
         for child in self.children.iter() {
@@ -939,7 +952,6 @@ impl AST {
         return Rc::new(RefCell::new(ret));
         */
 
-        // Create a new (child-less) root node with the cloned value
         let ret: Rc<RefCell<AST>> = Rc::new(RefCell::new(AST::new(self.value.clone())));
 
         // Use a queue to manage nodes to be copied
@@ -962,11 +974,14 @@ impl AST {
             }
         }
 
-        return ret;
+        return Rc::try_unwrap(ret)
+            .expect("Failed to unwrap Rc. ")
+            .into_inner();
     }
 
     pub fn to_string(&self) -> String {
         return match &self.value {
+            Element::Derive => format!("der({})", self.children[0].borrow().to_string()),
             Element::Function(iden) => {
                 format!("{}({})", iden, self.children[0].borrow().to_string())
             }
@@ -987,34 +1002,22 @@ impl AST {
             Element::Mult => {
                 let child_left: std::cell::Ref<AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
-                    Element::Function(_) => child_left.to_string(),
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
-                    Element::Mult => child_left.to_string(),
-                    Element::Div => child_left.to_string(),
-                    Element::Exp => child_left.to_string(),
-                    Element::Fact => child_left.to_string(),
-                    Element::Mod => child_left.to_string(),
                     Element::Number(number) => number.get_numerical().to_string(),
                     Element::Var => String::from("x"),
-                    Element::Neg => child_left.to_string(),
                     Element::None => String::from("None"),
+                    _ => child_left.to_string(), //der, fn, mult, div, exp, fact, mod, neg
                 };
 
                 let child_right: std::cell::Ref<AST> = self.children[1].borrow();
                 let right_side: String = match child_right.value.clone() {
-                    Element::Function(_) => child_right.to_string(),
                     Element::Add => format!("({})", child_right.to_string()),
                     Element::Sub => format!("({})", child_right.to_string()),
-                    Element::Mult => child_right.to_string(),
-                    Element::Div => child_right.to_string(),
-                    Element::Exp => child_right.to_string(),
-                    Element::Fact => child_right.to_string(),
-                    Element::Mod => child_right.to_string(),
                     Element::Number(number) => number.get_numerical().to_string(),
                     Element::Var => String::from("x"),
-                    Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
+                    _ => child_right.to_string(), //der, fn, mult, div, exp, fact, mod, neg
                 };
 
                 format!("{}*{}", left_side, right_side)
@@ -1022,22 +1025,17 @@ impl AST {
             Element::Div => {
                 let child_left: std::cell::Ref<AST> = self.children[0].borrow();
                 let numerator: String = match child_left.value.clone() {
-                    Element::Function(_) => child_left.to_string(),
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
-                    Element::Mult => child_left.to_string(),
-                    Element::Div => child_left.to_string(),
-                    Element::Exp => child_left.to_string(),
-                    Element::Fact => child_left.to_string(),
-                    Element::Mod => child_left.to_string(),
                     Element::Number(number) => number.get_numerical().to_string(),
                     Element::Var => String::from("x"),
-                    Element::Neg => child_left.to_string(),
                     Element::None => String::from("None"),
+                    _ => child_left.to_string(), // der, fn, mult, div, exp, fact, mod, neg
                 };
 
                 let child_right: std::cell::Ref<AST> = self.children[1].borrow();
                 let denominator: String = match child_right.value.clone() {
+                    Element::Derive => child_right.to_string(),
                     Element::Function(_) => child_right.to_string(),
                     Element::Exp => child_right.to_string(),
                     Element::Fact => child_right.to_string(),
@@ -1052,9 +1050,9 @@ impl AST {
                 format!("{}/{}", numerator, denominator)
             }
             Element::Exp => {
-
                 let child_left: std::cell::Ref<AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
+                    Element::Derive => child_left.to_string(),
                     Element::Function(_) => child_left.to_string(),
                     Element::Fact => child_left.to_string(),
                     Element::Number(number) => number.get_numerical().to_string(),
@@ -1065,6 +1063,7 @@ impl AST {
 
                 let child_right: std::cell::Ref<AST> = self.children[1].borrow();
                 let right_side: String = match child_right.value.clone() {
+                    Element::Derive => child_right.to_string(),
                     Element::Function(_) => child_left.to_string(),
                     Element::Exp => child_right.to_string(),
                     Element::Fact => child_right.to_string(),
@@ -1074,14 +1073,13 @@ impl AST {
                     Element::None => String::from("None"),
                     _ => format!("({})", child_right.to_string()),
                 };
-                
-                format!("{}^{}", left_side, right_side)
 
-            },
+                format!("{}^{}", left_side, right_side)
+            }
             Element::Fact => {
-                
                 let child: std::cell::Ref<AST> = self.children[0].borrow();
                 let left_side: String = match child.value.clone() {
+                    Element::Derive => child.to_string(),
                     Element::Function(ident) => format!("{}({})", ident, child.to_string()),
                     Element::Fact => child.to_string(),
                     Element::Number(number) => number.get_numerical().to_string(),
@@ -1091,10 +1089,8 @@ impl AST {
                 };
 
                 format!("{}!", left_side)
-
-            },
+            }
             Element::Mod => {
-
                 let child_left: std::cell::Ref<AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
                     Element::Number(number) => number.get_numerical().to_string(),
@@ -1112,12 +1108,10 @@ impl AST {
                 };
 
                 format!("{}%{}", left_side, right_side)
-
-            },
+            }
             Element::Number(number) => number.get_numerical().to_string(),
             Element::Var => String::from("x"),
             Element::Neg => {
-
                 let child_left: std::cell::Ref<AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
                     Element::Number(number) => number.get_numerical().to_string(),
@@ -1129,54 +1123,359 @@ impl AST {
                     _ => child_left.to_string(),
                 };
 
-
                 format!("-{}", left_side)
-
-            },
+            }
             Element::None => String::from("None"),
         };
+    }
+
+    /// Creates an [AST] containing the given value with no children. 
+    /// 
+    /// Just serves to reduce boilerplate and increase redability. 
+    pub fn from_number(num: Number) -> Self {
+        AST {
+            value: Element::Number(num),
+            children: Vec::new(),
+        }
+    }
+
+    /// Derives the contents of the given [AST].
+    pub fn derive(&self) -> Result<Self, String> {
+        // Derivative rules: https://en.wikipedia.org/wiki/Differentiation_rules
+
+        let ret: AST = match self.value {
+            Element::Derive => {
+                todo!("No support for 2nd derivatives right now. To be implemented. ")
+            }
+            //Element::Derive => self.children[0].borrow().derive(),
+            Element::Function(_) => todo!("Use derivative rule for each function. "),
+            Element::Add => AST {
+                value: Element::Add,
+                children: vec![
+                    Rc::new(RefCell::new(self.children[0].borrow().derive()?)),
+                    Rc::new(RefCell::new(self.children[1].borrow().derive()?)),
+                ],
+            },
+            Element::Sub => AST {
+                value: Element::Sub,
+                children: vec![
+                    Rc::new(RefCell::new(self.children[0].borrow().derive()?)),
+                    Rc::new(RefCell::new(self.children[1].borrow().derive()?)),
+                ],
+            },
+            Element::Mult => {
+                // (f*g)' = f'*g + g'*f
+                // assume only 2 multiplied elements, otherwise invalid AST
+
+                // f'
+                let der_0: AST = self.children[0].borrow().derive()?;
+                // g'
+                let der_1: AST = self.children[1].borrow().derive()?;
+
+                // f'*g
+                let prod_0: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(der_0)),
+                        self.children.get(0).unwrap().clone(),
+                    ],
+                };
+
+                // g'*f
+                let prod_1: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(der_1)),
+                        self.children.get(1).unwrap().clone(),
+                    ],
+                };
+
+                AST {
+                    value: Element::Add,
+                    children: vec![Rc::new(RefCell::new(prod_0)), Rc::new(RefCell::new(prod_1))],
+                }
+            }
+            Element::Div => {
+                // assume only 2 divided elements, otherwise invalid AST
+                // (f/g)' = (f'*g - g'*f)/g^2
+
+                // f'
+                let der_0: AST = self.children[0].borrow().derive()?;
+
+                // g'
+                let der_1: AST = self.children[1].borrow().derive()?;
+
+                // f'*g
+                let prod_0: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(der_0)),
+                        self.children.get(0).unwrap().clone(),
+                    ],
+                };
+
+                // g'*f
+                let prod_1: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(der_1)),
+                        self.children.get(1).unwrap().clone(),
+                    ],
+                };
+
+                // f'*g + g'*f
+                let numerator: AST = AST {
+                    value: Element::Sub,
+                    children: vec![Rc::new(RefCell::new(prod_0)), Rc::new(RefCell::new(prod_1))],
+                };
+
+                // g^2
+                let denominator: AST = AST {
+                    value: Element::Exp,
+                    children: vec![
+                        Rc::new(RefCell::new(self.children[1].borrow().deep_copy())),
+                        Rc::new(RefCell::new(AST {
+                            value: Element::Number(Number::Rational(2, 1)),
+                            children: Vec::new(),
+                        })),
+                    ],
+                };
+
+                AST {
+                    value: Element::Div,
+                    children: vec![
+                        Rc::new(RefCell::new(numerator)),
+                        Rc::new(RefCell::new(denominator)),
+                    ],
+                }
+            }
+            Element::Exp => {
+                // If form f^a => a*f^(a-1) * f'     (a is constant)
+                // If form a^f => a^f * ln(a)*f'
+                // If form f^g => f^g * (f' * g/f + g' * ln(f))
+
+                let contains_var_0: bool = self.children[0].borrow().contains_variable();
+                let contains_var_1: bool = self.children[1].borrow().contains_variable();
+                match (contains_var_0, contains_var_1) {
+                    (true, true) => {
+                        // f^g => f^g * (f' * g/f + g' * ln(f))
+                        // oh, boy...
+
+                        // f'
+                        let der_0: AST = self.children[0].borrow().derive()?;
+                        // g'
+                        let der_1: AST = self.children[1].borrow().derive()?;
+
+                        // ln(f)
+                        let ln_f: AST = AST {
+                            value: Element::Function(String::from("ln")),
+                            children: vec![self.children[0].clone()],
+                        };
+
+                        // g/f
+                        let g_over_f: AST = AST {
+                            value: Element::Div,
+                            children: vec![self.children[1].clone(), self.children[0].clone()],
+                        };
+
+                        // f' * g/f
+                        let prod_1: AST = AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::new(RefCell::new(der_0)),
+                                Rc::new(RefCell::new(g_over_f)),
+                            ],
+                        };
+
+                        // g' * ln(f)
+                        let prod_2: AST = AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::new(RefCell::new(der_1)),
+                                Rc::new(RefCell::new(ln_f)),
+                            ],
+                        };
+
+                        // f' * g/f + g' * ln(f)
+                        let chain_rule_coef: AST = AST {
+                            value: Element::Add,
+                            children: vec![
+                                Rc::new(RefCell::new(prod_1)),
+                                Rc::new(RefCell::new(prod_2)),
+                            ],
+                        };
+
+                        // f^g * (f' * g/f + g' * ln(f))
+                        AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::new(RefCell::new(self.clone())),
+                                Rc::new(RefCell::new(chain_rule_coef)),
+                            ],
+                        }
+                    }
+                    (true, false) => {
+                        // f^a => a*f^(a-1) * f'
+
+                        //f'
+                        let der: AST = self.children[0].borrow().derive()?;
+
+                        // a
+                        let exp: Number = self.children[1].borrow_mut().evaluate(None)?;
+
+                        // a-1
+                        let exp_minus_1: Number = exp.clone() - Number::Rational(1, 1);
+
+                        // f^(a-1)
+                        let power: AST = AST {
+                            value: Element::Exp,
+                            children: vec![
+                                self.children[0].clone(),
+                                Rc::new(RefCell::new(AST {
+                                    value: Element::Number(exp_minus_1),
+                                    children: Vec::new(),
+                                })),
+                            ],
+                        };
+
+                        // a * f^(a-1)
+                        let power_const: AST = AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::new(RefCell::new(AST {
+                                    value: Element::Number(exp),
+                                    children: Vec::new(),
+                                })),
+                                Rc::new(RefCell::new(power)),
+                            ],
+                        };
+
+                        // a*f^(a-1) * f'     (chain rule)
+                        AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::new(RefCell::new(power_const)),
+                                Rc::new(RefCell::new(der)),
+                            ],
+                        }
+                    }
+                    (false, true) => {
+                        //a^f => a^f * ln(a)*f'
+
+                        //f'
+                        let der: AST = self.children[1].borrow().derive()?;
+
+                        let mut ln_a_numerical: Number =
+                            self.children[0].borrow_mut().evaluate(None)?;
+                        ln_a_numerical = Functions::find_and_evaluate("ln", ln_a_numerical)?;
+
+                        let ln_a: AST = AST {
+                            value: Element::Number(ln_a_numerical),
+                            children: Vec::new(),
+                        };
+
+                        // ln(a)*f'
+                        let der_ln_a: AST = AST {
+                            value: Element::Mult,
+                            children: vec![Rc::new(RefCell::new(ln_a)), Rc::new(RefCell::new(der))],
+                        };
+
+                        // a^f * ln(a)*f'
+                        AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::new(RefCell::new(self.clone())),
+                                Rc::new(RefCell::new(der_ln_a)),
+                            ],
+                        }
+                    }
+                    (false, false) => {
+                        //just a constant. The derivative of a constant is 0.
+                        AST {
+                            value: Element::Number(Number::Rational(0, 1)),
+                            children: Vec::new(),
+                        }
+                    }
+                }
+            }
+            Element::Fact => {
+                return Err(String::from(
+                    "Derivative of the factorial function is not supported. ",
+                ))
+            }
+            Element::Mod => self.clone(), //just the identity
+            Element::Number(_) => AST {
+                //derivative of constant is 0
+                value: Element::Number(Number::Rational(0, 1)),
+                children: Vec::new(),
+            },
+            Element::Var => AST {
+                // derivative of x is 1
+                value: Element::Number(Number::Rational(1, 1)),
+                children: Vec::new(),
+            },
+            Element::Neg => {
+                let der: AST = self.children[0].borrow().derive()?;
+
+                AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(AST {
+                            value: Element::Number(Number::Rational(-1, 1)),
+                            children: Vec::new(),
+                        })),
+                        Rc::new(RefCell::new(der)),
+                    ],
+                }
+            }
+            Element::None => return Err(String::from("No derivative of None. ")),
+        };
+
+        return Ok(ret);
     }
 }
 
 impl Evaluable for AST {
     /// Evaluates the [AST] recursively.
-    fn evaluate(&mut self) -> Result<Number, String> {
+    fn evaluate(&mut self, var_value: Option<Number>) -> Result<Number, String> {
         match &self.value {
+            Element::Derive => {
+                return Err(String::from(
+                    "Cannor evaluate derivative. Derive first and then evaluate. ",
+                ))
+            }
             Element::Function(name) => {
                 return crate::functions::Functions::find_and_evaluate(
                     name.as_str(),
-                    (*self.children[0].borrow_mut()).evaluate()?,
+                    (*self.children[0].borrow_mut()).evaluate(var_value)?,
                 );
             }
             Element::Add => {
                 let mut acc: Number = Number::new_rational(0, 1)?;
 
                 for x in &self.children {
-                    acc = (*x.borrow_mut()).evaluate()? + acc
+                    acc = (*x.borrow_mut()).evaluate(var_value.clone())? + acc
                 }
 
-                return Ok(acc);
+                Ok(acc)
             }
             Element::Sub => {
                 match self.children.len() {
                     1 => {
-                        return match (*self.children[0].borrow_mut()).evaluate()? {
+                        //deprecated case
+                        match (*self.children[0].borrow_mut()).evaluate(var_value)? {
                             Number::Real(x) => Ok(Number::new_real(-x)),
                             Number::Rational(n, d) => Ok(Number::new_rational(-n, d)?),
-                        };
-
-                        //return (*self.children[0].borrow_mut()).evaluate();
+                        }
                     }
-                    2 => {
-                        return Ok((*self.children[0].borrow_mut()).evaluate()?
-                            - (*self.children[1].borrow_mut()).evaluate()?);
-                    }
-                    _ => {
-                        return Err(format!(
-                            "Substraction needs exacly 1 or 2 arguments, {:?} were provided. \n",
-                            self.children.len()
-                        ));
-                    }
+                    2 => Ok(
+                        (*self.children[0].borrow_mut()).evaluate(var_value.clone())?
+                            - (*self.children[1].borrow_mut()).evaluate(var_value)?,
+                    ),
+                    _ => Err(format!(
+                        "Substraction needs exacly 2 arguments, {:?} were provided. \n",
+                        self.children.len()
+                    )),
                 }
             }
             Element::Mult => {
@@ -1190,10 +1489,10 @@ impl Evaluable for AST {
                 let mut acc: Number = Number::new_rational(1, 1)?;
 
                 for x in &self.children {
-                    acc = (*x.borrow_mut()).evaluate()? * acc;
+                    acc = (*x.borrow_mut()).evaluate(var_value.clone())? * acc;
                 }
 
-                return Ok(acc);
+                Ok(acc)
             }
             Element::Div => {
                 if self.children.len() != 2 {
@@ -1205,10 +1504,10 @@ impl Evaluable for AST {
 
                 let inverse: Number = crate::functions::Functions::find_and_evaluate(
                     "inv",
-                    (*self.children[1].borrow_mut()).evaluate()?,
+                    (*self.children[1].borrow_mut()).evaluate(var_value.clone())?,
                 )?;
 
-                return Ok((*self.children[0].borrow_mut()).evaluate()? * inverse);
+                Ok((*self.children[0].borrow_mut()).evaluate(var_value)? * inverse)
             }
             Element::Exp => {
                 if self.children.len() != 2 {
@@ -1218,9 +1517,9 @@ impl Evaluable for AST {
                     ));
                 }
 
-                return Ok((*self.children[0].borrow_mut())
-                    .evaluate()?
-                    .raise_exponent((*self.children[1].borrow_mut()).evaluate()?)?);
+                Ok((*self.children[0].borrow_mut())
+                    .evaluate(var_value.clone())?
+                    .raise_exponent((*self.children[1].borrow_mut()).evaluate(var_value)?)?)
             }
             Element::Fact => {
                 if self.children.len() != 1 {
@@ -1230,7 +1529,7 @@ impl Evaluable for AST {
                     ));
                 }
 
-                let x: Number = (*self.children[0].borrow_mut()).evaluate()?;
+                let x: Number = (*self.children[0].borrow_mut()).evaluate(var_value.clone())?;
                 if !x.is_integer() {
                     return Err(format!(
                         "The factorial only takes integer inputs. Number found: {:?}\n",
@@ -1254,10 +1553,10 @@ impl Evaluable for AST {
                             acc = acc * i;
                         }
 
-                        return Ok(Number::new_rational(acc, 1)?);
+                        Ok(Number::new_rational(acc, 1)?)
                     }
-                    _ => return Err(format!("Impossible case. Real number factorial. \n")),
-                };
+                    _ => Err(format!("Impossible case. Real number factorial. \n")),
+                }
             }
             Element::Mod => {
                 if self.children.len() != 2 {
@@ -1267,8 +1566,8 @@ impl Evaluable for AST {
                     ));
                 }
 
-                let x: Number = (*self.children[0].borrow_mut()).evaluate()?;
-                let y: Number = (*self.children[1].borrow_mut()).evaluate()?;
+                let x: Number = (*self.children[0].borrow_mut()).evaluate(var_value.clone())?;
+                let y: Number = (*self.children[1].borrow_mut()).evaluate(var_value)?;
 
                 if x.is_integer() && y.is_integer() {
                     let x_int: i64 = match x {
@@ -1287,7 +1586,7 @@ impl Evaluable for AST {
                 let x_numerical: f64 = x.get_numerical();
                 let y_numerical: f64 = y.get_numerical();
 
-                return Ok(Number::new_real(x_numerical % y_numerical));
+                Ok(Number::new_real(x_numerical % y_numerical))
             }
             Element::Number(x) => Ok(x.clone()),
             Element::Neg => {
@@ -1298,16 +1597,21 @@ impl Evaluable for AST {
                         self.children.len()
                     ));
                 }
-                let mut ret: Number = (*self.children[0].borrow_mut()).evaluate()?;
+                let mut ret: Number = (*self.children[0].borrow_mut()).evaluate(var_value)?;
 
                 match &mut ret {
                     Number::Real(r) => *r = -*r,
                     Number::Rational(n, _) => *n = -*n,
                 }
 
-                return Ok(ret);
+                Ok(ret)
             }
-            Element::Var => Err(String::from("Attempt to evaluate a variable. ")),
+            Element::Var => match var_value {
+                Some(varibale_value) => Ok(varibale_value),
+                None => Err(String::from(
+                    "Attempt to evaluate a variable without given value. ",
+                )),
+            },
             Element::None => Err(String::from("None reached. ")),
         }
     }
@@ -1790,7 +2094,7 @@ impl fmt::Debug for Number {
 
 impl Evaluable for Number {
     /// Returns the [Number] itself.
-    fn evaluate(&mut self) -> Result<Number, String> {
+    fn evaluate(&mut self, _var_value: Option<Number>) -> Result<Number, String> {
         return Ok(self.clone());
     }
 }

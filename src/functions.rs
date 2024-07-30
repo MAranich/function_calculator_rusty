@@ -1,6 +1,10 @@
-use std::f64::consts::{E, PI};
+use std::{
+    cell::{Ref, RefCell},
+    f64::consts::{E, PI},
+    rc::Rc,
+};
 
-use crate::datastructures::Number;
+use crate::{datastructures::Number, Element, AST};
 
 /*
 sum:                x + y
@@ -153,6 +157,190 @@ impl Functions {
 
             _ => Err("Function not found. ".to_string()),
         };
+    }
+
+    pub fn func_derive(input: AST) -> Result<AST, String> {
+        let function_name: &String = if let Element::Function(iden) = &input.value {
+            iden
+        } else {
+            return Err(format!(
+                "func_derive must be called with functions. It was called with: \n{}",
+                input.to_string()
+            ));
+        };
+
+        if !input.contains_variable() {
+            // the derivative of anything that does not depend on the variable is 0
+            return AST {
+                value: Element::Number(Number::Rational(0, 1)),
+                children: Vec::new(),
+            };
+        }
+
+        let ret: AST = match function_name.as_str() {
+            FN_STR_INV => {
+                // 1/f => f'/(f^2)
+
+                // f'
+                let der: AST = input.derive()?;
+
+                // f^2
+                let f_sq: AST = AST {
+                    value: Element::Exp,
+                    children: vec![
+                        input.children[0].clone(),
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                    ],
+                };
+
+                // f'/(f^2)
+                AST {
+                    value: Element::Div,
+                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(f_sq))],
+                }
+            }
+            FN_STR_SQRT => {
+                // sqrt(f) = f'/(2*sqrt(f))
+
+                // f'
+                let der: AST = input.derive()?;
+
+                //2*sqrt(f)
+                let f2: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                        Rc::new(RefCell::new(input.clone())),
+                    ],
+                };
+
+                // f'/(2*sqrt(f))
+                AST {
+                    value: Element::Div,
+                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(f2))],
+                }
+            }
+            FN_STR_SIN => {
+                // sin(f) => cos(f)*f'
+
+                // f'
+                let der: AST = input.derive()?;
+
+                // cos(f)
+                let mut cos: AST = input.clone();
+                cos.value = Element::Function(String::from(FN_STR_COS));
+
+                // cos(f)*f'
+                AST {
+                    value: Element::Mult,
+                    children: vec![Rc::new(RefCell::new(cos)), Rc::new(RefCell::new(der))],
+                }
+            }
+            FN_STR_COS => {
+                // cos(f) => -sin(f)*f'
+
+                // f'
+                let der: AST = input.derive()?;
+
+                // sin(f)
+                let mut sin: AST = input.clone();
+                sin.value = Element::Function(String::from(FN_STR_SIN));
+
+                // -sin(f)
+                let minus_sin: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(-1, 1)))),
+                        Rc::new(RefCell::new(sin)),
+                    ],
+                };
+
+                // -sin(f)*f'
+                AST {
+                    value: Element::Mult,
+                    children: vec![Rc::new(RefCell::new(minus_sin)), Rc::new(RefCell::new(der))],
+                }
+            }
+            FN_STR_TAN => {
+                // tan(f) => (1 + tan(f)^2) * f'
+
+                // f'
+                let der: AST = input.derive()?;
+
+                // tan(f)^2
+                let tan_sq: AST = AST {
+                    value: Element::Exp,
+                    children: vec![
+                        Rc::new(RefCell::new(input.clone())),
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                    ],
+                };
+
+                // tan(f)^2 + 1
+                let tan_sq_plus_1: AST = AST {
+                    value: Element::Add,
+                    children: vec![
+                        Rc::new(RefCell::new(tan_sq)),
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(1, 1)))),
+                    ],
+                };
+
+                // (1 + tan(f)^2) * f'
+
+                AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(tan_sq_plus_1)),
+                        Rc::new(RefCell::new(der)),
+                    ],
+                }
+            }
+            FN_STR_ASIN => {
+                // arcsin(f) => f'/sqrt(1-f^2)
+
+                // f'
+                let der: AST = input.derive()?;
+
+                todo!();
+            }
+            FN_STR_ACOS => {
+                // f'
+                let der: AST = input.derive()?;
+
+                todo!();
+            }
+            FN_STR_ATAN => {
+                // f'
+                let der: AST = input.derive()?;
+
+                todo!();
+            }
+            FN_STR_EXP => {
+                // f'
+                let der: AST = input.derive()?;
+
+                todo!();
+            }
+            FN_STR_LN => {
+                // f'
+                let der: AST = input.derive()?;
+
+                todo!();
+            }
+            FN_STR_ABS => {
+                // f'
+                let der: AST = input.derive()?;
+
+                todo!();
+            }
+            _ => {
+                return Err(String::from(
+                    "Trying to derive a function that does not exist / unimplemented. \n",
+                ));
+            }
+        };
+
+        return Ok(ret);
     }
 }
 
