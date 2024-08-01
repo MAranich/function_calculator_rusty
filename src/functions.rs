@@ -301,31 +301,125 @@ impl Functions {
                 // f'
                 let der: AST = input.derive()?;
 
-                todo!();
+                // f^2
+                let f_sq: AST = AST {
+                    value: Element::Exp,
+                    children: vec![
+                        Rc::new(RefCell::new(input.clone())),
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                    ],
+                };
+
+                // 1-f^2
+                let one_minus_f_sq: AST = AST {
+                    value: Element::Sub,
+                    children: vec![
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(1, 1)))),
+                        Rc::new(RefCell::new(f_sq)),
+                    ],
+                };
+
+                // sqrt(1-f^2)
+                let sqrt_fn: AST = AST {
+                    value: Element::Function(String::from(FN_STR_SQRT)),
+                    children: vec![Rc::new(RefCell::new(one_minus_f_sq))],
+                };
+
+                // f'/sqrt(1-f^2)
+                AST {
+                    value: Element::Div,
+                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(sqrt_fn))],
+                }
             }
             FN_STR_ACOS => {
+                // arccos(f) => -f'/sqrt(1-f^2)
+
                 // f'
                 let der: AST = input.derive()?;
 
-                todo!();
+                // f^2
+                let f_sq: AST = AST {
+                    value: Element::Exp,
+                    children: vec![
+                        Rc::new(RefCell::new(input.clone())),
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                    ],
+                };
+
+                // 1-f^2
+                let one_minus_f_sq: AST = AST {
+                    value: Element::Sub,
+                    children: vec![
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(1, 1)))),
+                        Rc::new(RefCell::new(f_sq)),
+                    ],
+                };
+
+                // sqrt(1-f^2)
+                let sqrt_fn: AST = AST {
+                    value: Element::Function(String::from(FN_STR_SQRT)),
+                    children: vec![Rc::new(RefCell::new(one_minus_f_sq))],
+                };
+
+                // f'/sqrt(1-f^2)
+                let arcsin_der: AST = AST {
+                    value: Element::Div,
+                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(sqrt_fn))],
+                }; 
+
+                AST {
+                    value: Element::Neg,
+                    children: vec![Rc::new(RefCell::new(arcsin_der))],
+                }
+
             }
             FN_STR_ATAN => {
+                // arctan(f) => f'/1+f^2
+
                 // f'
                 let der: AST = input.derive()?;
 
-                todo!();
+                // f^2
+                let f_sq: AST = AST {
+                    value: Element::Exp,
+                    children: vec![
+                        Rc::new(RefCell::new(input.clone())),
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                    ],
+                };
+
+                // 1+f^2
+                let one_plus_f_sq: AST = AST {
+                    value: Element::Add,
+                    children: vec![
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(1, 1)))),
+                        Rc::new(RefCell::new(f_sq)),
+                    ],
+                };
+
+                AST {
+                    value: Element::Div,
+                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(one_plus_f_sq))],
+                }
             }
             FN_STR_EXP => {
+                // exp(f) => exp(f) * f'
+
                 // f'
                 let der: AST = input.derive()?;
 
-                todo!();
+                AST {
+                    value: todo!(),
+                    children: todo!(),
+                }
             }
             FN_STR_LN => {
+            
+
                 // f'
                 let der: AST = input.derive()?;
 
-                todo!();
+
             }
             FN_STR_ABS => {
                 // f'
