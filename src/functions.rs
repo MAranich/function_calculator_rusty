@@ -159,7 +159,7 @@ impl Functions {
         };
     }
 
-    pub fn func_derive(input: AST) -> Result<AST, String> {
+    pub fn func_derive(input: &AST) -> Result<AST, String> {
         let function_name: &String = if let Element::Function(iden) = &input.value {
             iden
         } else {
@@ -171,10 +171,10 @@ impl Functions {
 
         if !input.contains_variable() {
             // the derivative of anything that does not depend on the variable is 0
-            return AST {
+            return Ok(AST {
                 value: Element::Number(Number::Rational(0, 1)),
                 children: Vec::new(),
-            };
+            });
         }
 
         let ret: AST = match function_name.as_str() {
@@ -182,7 +182,7 @@ impl Functions {
                 // 1/f => f'/(f^2)
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // f^2
                 let f_sq: AST = AST {
@@ -203,7 +203,7 @@ impl Functions {
                 // sqrt(f) = f'/(2*sqrt(f))
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 //2*sqrt(f)
                 let f2: AST = AST {
@@ -224,7 +224,7 @@ impl Functions {
                 // sin(f) => cos(f)*f'
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // cos(f)
                 let mut cos: AST = input.clone();
@@ -240,7 +240,7 @@ impl Functions {
                 // cos(f) => -sin(f)*f'
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // sin(f)
                 let mut sin: AST = input.clone();
@@ -265,7 +265,7 @@ impl Functions {
                 // tan(f) => (1 + tan(f)^2) * f'
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // tan(f)^2
                 let tan_sq: AST = AST {
@@ -299,13 +299,13 @@ impl Functions {
                 // arcsin(f) => f'/sqrt(1-f^2)
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // f^2
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        Rc::new(RefCell::new(input.clone())),
+                        input.children[0].clone(),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -335,13 +335,13 @@ impl Functions {
                 // arccos(f) => -f'/sqrt(1-f^2)
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // f^2
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        Rc::new(RefCell::new(input.clone())),
+                        input.children[0].clone(),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -365,25 +365,24 @@ impl Functions {
                 let arcsin_der: AST = AST {
                     value: Element::Div,
                     children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(sqrt_fn))],
-                }; 
+                };
 
                 AST {
                     value: Element::Neg,
                     children: vec![Rc::new(RefCell::new(arcsin_der))],
                 }
-
             }
             FN_STR_ATAN => {
                 // arctan(f) => f'/1+f^2
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 // f^2
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        Rc::new(RefCell::new(input.clone())),
+                        input.children[0].clone(),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -399,31 +398,42 @@ impl Functions {
 
                 AST {
                     value: Element::Div,
-                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(one_plus_f_sq))],
+                    children: vec![
+                        Rc::new(RefCell::new(der)),
+                        Rc::new(RefCell::new(one_plus_f_sq)),
+                    ],
                 }
             }
             FN_STR_EXP => {
                 // exp(f) => exp(f) * f'
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
+                
 
+                // exp(f) * f'
                 AST {
-                    value: todo!(),
-                    children: todo!(),
+                    value: Element::Mult,
+                    children: vec![Rc::new(RefCell::new(input.clone())), Rc::new(RefCell::new(der))],
                 }
             }
             FN_STR_LN => {
-            
+                // ln(f) => f'/f
 
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
-
+                // f'/f
+                AST {
+                    value: Element::Div,
+                    children: vec![Rc::new(RefCell::new(der)), input.children[0].clone()],
+                }
             }
             FN_STR_ABS => {
+                // |f| =>  f / ||
+
                 // f'
-                let der: AST = input.derive()?;
+                let der: AST = input.children[0].borrow().derive()?;
 
                 todo!();
             }
