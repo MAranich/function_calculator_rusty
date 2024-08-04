@@ -159,6 +159,11 @@ impl Functions {
         };
     }
 
+    /// Derivate a function
+    /// 
+    /// The current [AST] node must have the [AST::value] with the variant [Element::Function] 
+    /// with a regognized function. Some parts of the expression may be evaluated, therefore, if the expression 
+    /// is invalid, the function may return an error. 
     pub fn func_derive(input: &AST) -> Result<AST, String> {
         let function_name: &String = if let Element::Function(iden) = &input.value {
             iden
@@ -179,7 +184,7 @@ impl Functions {
 
         let ret: AST = match function_name.as_str() {
             FN_STR_INV => {
-                // 1/f => f'/(f^2)
+                // 1/f => -f'/(f^2)
 
                 // f'
                 let der: AST = input.children[0].borrow().derive()?;
@@ -188,15 +193,27 @@ impl Functions {
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        input.children[0].clone(),
+                        Rc::clone(&input.children[0]),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
+                    ],
+                };
+
+                // -f'
+                let minus_der: AST = AST {
+                    value: Element::Mult,
+                    children: vec![
+                        Rc::new(RefCell::new(AST::from_number(Number::Rational(-1, 1)))),
+                        Rc::new(RefCell::new(der)),
                     ],
                 };
 
                 // f'/(f^2)
                 AST {
                     value: Element::Div,
-                    children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(f_sq))],
+                    children: vec![
+                        Rc::new(RefCell::new(minus_der)),
+                        Rc::new(RefCell::new(f_sq)),
+                    ],
                 }
             }
             FN_STR_SQRT => {
@@ -210,7 +227,7 @@ impl Functions {
                     value: Element::Mult,
                     children: vec![
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
-                        Rc::new(RefCell::new(input.clone())),
+                        Rc::new(RefCell::new(input.deep_copy())),
                     ],
                 };
 
@@ -227,7 +244,7 @@ impl Functions {
                 let der: AST = input.children[0].borrow().derive()?;
 
                 // cos(f)
-                let mut cos: AST = input.clone();
+                let mut cos: AST = input.deep_copy();
                 cos.value = Element::Function(String::from(FN_STR_COS));
 
                 // cos(f)*f'
@@ -243,7 +260,7 @@ impl Functions {
                 let der: AST = input.children[0].borrow().derive()?;
 
                 // sin(f)
-                let mut sin: AST = input.clone();
+                let mut sin: AST = input.deep_copy();
                 sin.value = Element::Function(String::from(FN_STR_SIN));
 
                 // -sin(f)
@@ -271,7 +288,7 @@ impl Functions {
                 let tan_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        Rc::new(RefCell::new(input.clone())),
+                        Rc::new(RefCell::new(input.deep_copy())),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -305,7 +322,7 @@ impl Functions {
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        input.children[0].clone(),
+                        Rc::clone(&input.children[0]),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -341,7 +358,7 @@ impl Functions {
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        input.children[0].clone(),
+                        Rc::clone(&input.children[0]),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -382,7 +399,7 @@ impl Functions {
                 let f_sq: AST = AST {
                     value: Element::Exp,
                     children: vec![
-                        input.children[0].clone(),
+                        Rc::clone(&input.children[0]),
                         Rc::new(RefCell::new(AST::from_number(Number::Rational(2, 1)))),
                     ],
                 };
@@ -409,12 +426,14 @@ impl Functions {
 
                 // f'
                 let der: AST = input.children[0].borrow().derive()?;
-                
 
                 // exp(f) * f'
                 AST {
                     value: Element::Mult,
-                    children: vec![Rc::new(RefCell::new(input.clone())), Rc::new(RefCell::new(der))],
+                    children: vec![
+                        Rc::new(RefCell::new(input.deep_copy())),
+                        Rc::new(RefCell::new(der)),
+                    ],
                 }
             }
             FN_STR_LN => {
@@ -426,16 +445,28 @@ impl Functions {
                 // f'/f
                 AST {
                     value: Element::Div,
-                    children: vec![Rc::new(RefCell::new(der)), input.children[0].clone()],
+                    children: vec![Rc::new(RefCell::new(der)), Rc::clone(&input.children[0])],
                 }
             }
             FN_STR_ABS => {
-                // |f| =>  f / ||
+                // |f| =>  f / |f| * f'
 
                 // f'
                 let der: AST = input.children[0].borrow().derive()?;
 
-                todo!();
+                // f
+                let inner: Rc<RefCell<AST>> = Rc::clone(&input.children[0]);
+
+                // f / |f|
+                let sign: AST = AST {
+                    value: Element::Div,
+                    children: vec![inner, Rc::new(RefCell::new(input.deep_copy()))],
+                };
+
+                AST {
+                    value: Element::Mult, 
+                    children: vec![Rc::new(RefCell::new(sign)), Rc::new(RefCell::new(der))]
+                }
             }
             _ => {
                 return Err(String::from(

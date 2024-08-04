@@ -1148,7 +1148,10 @@ impl AST {
                 todo!("No support for 2nd derivatives right now. To be implemented. ")
             }
             //Element::Derive => self.children[0].borrow().derive(),
-            Element::Function(_) => todo!("Use derivative rule for each function. "),
+            Element::Function(_) => {
+                //todo!("Use derivative rule for each function. ")}
+                Functions::func_derive(self)?
+            }, 
             Element::Add => AST {
                 value: Element::Add,
                 children: vec![
