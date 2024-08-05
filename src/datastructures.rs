@@ -899,6 +899,8 @@ impl AST {
     /// Will return an error if the expression is not valid (dividing by 0 or by
     /// evaluating a function outside it's domains).
     pub fn simplify_expression(self) -> Result<Self, String> {
+        // todo!("Add basic arithmetic simplifications: ")
+
         let original_node: Rc<RefCell<AST>> = Rc::new(RefCell::new(self));
 
         let mut stack: Vec<Rc<RefCell<AST>>> = vec![original_node.clone()];
@@ -926,6 +928,94 @@ impl AST {
         return Ok(Rc::try_unwrap(original_node)
             .expect("Failed to unwrap Rc. ")
             .into_inner());
+    }
+
+    pub fn simplify_arithmetical(self) -> Result<Self, String> {
+        // Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression]
+
+        // 1)   x +- 0 = x
+        // 2)   x * 0 = 0
+        // 3)   x * 1 = x
+        // 4)   0/x = 0
+        // 5)   x/1 = x
+        // 6)   x/x = 1
+        // 7)   x ^ 1 = x
+        // 8)   x ^ 0 = 1
+        // 9)   x^a * x^b = x^(a+b)
+        // 11)  sqrt(x^(2*a)) = |x|^a    // a is whole
+        // 12)  x + a + x = 2*x + a
+        // 13)  -(-x) = x
+
+        let ret: AST = match self.value {
+            Element::Function(_) => self,
+            Element::Add => {
+                // 1) x + 0 = x
+
+                let substitute_0: bool =
+                    if let Element::Number(is_zero) = &self.children[0].borrow().value {
+                        match is_zero {
+                            Number::Real(r) => r == &0.0,
+                            Number::Rational(n, _) => n == &0,
+                        }
+                    } else {
+                        false
+                    };
+
+                let substitute_1: bool =
+                    if let Element::Number(is_zero) = &self.children[1].borrow().value {
+                        match is_zero {
+                            Number::Real(r) => r == &0.0,
+                            Number::Rational(n, _) => n == &0,
+                        }
+                    } else {
+                        false
+                    };
+
+                match (substitute_0, substitute_1) {
+                    (true, true) => AST::from_number(Number::Rational(0, 1)),
+                    (true, false) => self.children[1].borrow().deep_copy(),
+                    (false, true) => self.children[0].borrow().deep_copy(),
+                    (false, false) => self,
+                }
+            }
+            Element::Sub => {
+                // 1) x - 0 = x
+
+                let substitute_1: bool =
+                    if let Element::Number(is_zero) = &self.children[1].borrow().value {
+                        match is_zero {
+                            Number::Real(r) => r == &0.0,
+                            Number::Rational(n, _) => n == &0,
+                        }
+                    } else {
+                        false
+                    };
+
+                if substitute_1 {
+                    self.children[0].borrow().deep_copy()
+                } else {
+                    self
+                }
+            }
+            Element::Mult => {
+                // 2)   x * 0 = 0
+
+
+
+
+                self
+            },
+            Element::Div => todo!(),
+            Element::Exp => todo!(),
+            Element::Neg => todo!(),
+            _ => {
+                // No simplification for:
+                //      derive, None, Number, mod, fact, var
+                self
+            }
+        };
+
+        return Ok(ret);
     }
 
     /// Deep copies the [AST]
@@ -1129,9 +1219,9 @@ impl AST {
         };
     }
 
-    /// Creates an [AST] containing the given value with no children. 
-    /// 
-    /// Just serves to reduce boilerplate and increase redability. 
+    /// Creates an [AST] containing the given value with no children.
+    ///
+    /// Just serves to reduce boilerplate and increase redability.
     pub fn from_number(num: Number) -> Self {
         AST {
             value: Element::Number(num),
@@ -1151,7 +1241,7 @@ impl AST {
             Element::Function(_) => {
                 //todo!("Use derivative rule for each function. ")}
                 Functions::func_derive(self)?
-            }, 
+            }
             Element::Add => AST {
                 value: Element::Add,
                 children: vec![
