@@ -183,6 +183,17 @@ pub trait Evaluable {
     fn evaluate(&mut self, x: Option<Number>) -> Result<Number, String>;
 }
 
+/// An [AST] that contains the number 0.
+const AST_ZERO: AST = AST {
+    value: Element::Number(Number::Rational(0, 1)),
+    children: Vec::new(),
+};
+/// An [AST] that contains the number 1.
+const AST_ONE: AST = AST {
+    value: Element::Number(Number::Rational(1, 1)),
+    children: Vec::new(),
+};
+
 impl DFA {
     /// Create a new [DFA].
     ///
@@ -808,6 +819,16 @@ impl AST {
         }
     }
 
+    /// Creates an [AST] containing the given value with no children.
+    ///
+    /// Just serves to reduce boilerplate and increase redability.
+    pub fn from_number(num: Number) -> Self {
+        AST {
+            value: Element::Number(num),
+            children: Vec::new(),
+        }
+    }
+
     /// Adds the given [AST] as a children of Self.
     pub fn add_children(&mut self, child: AST) {
         let ast_ptr: Rc<RefCell<AST>> = Rc::new(RefCell::new(child));
@@ -818,6 +839,48 @@ impl AST {
     pub fn set_empty(&mut self) {
         self.children.clear();
         self.value = Element::None;
+    }
+
+    /// Returns true if both [AST] contain the same values.
+    ///
+    /// The order of the child matters even if the operation is commutative.
+    /// To fix this, [AST::sort] can be called before.
+    pub fn equal(&self, other: &Self) -> bool {
+        // check that they have the same value + same number of childs
+        if self.value != other.value || self.children.len() != other.children.len() {
+            return false;
+        }
+
+        // add childs to the stack
+        let mut stack: Vec<(Rc<RefCell<AST>>, Rc<RefCell<AST>>)> = Vec::new();
+        for (child_self, child_other) in self.children.iter().zip(other.children.iter()) {
+            stack.push((Rc::clone(child_self), Rc::clone(&child_other)));
+        }
+
+        // repeat the process until no more childs
+        while let Some((current_self, current_other)) = stack.pop() {
+            if current_self.borrow().value != current_other.borrow().value
+                || current_self.borrow().children.len() != current_other.borrow().children.len()
+            {
+                return false;
+            }
+
+            for (child_self, child_other) in current_self
+                .borrow()
+                .children
+                .iter()
+                .zip(current_other.borrow().children.iter())
+            {
+                stack.push((Rc::clone(child_self), Rc::clone(&child_other)));
+            }
+        }
+
+        true
+    }
+
+    /// Sorts the given [AST] in a consistent way
+    pub fn sort(&mut self) {
+        todo!("Implement AST sort");
     }
 
     /// Determinates if the [AST] contains a variable from this node down.
@@ -997,14 +1060,86 @@ impl AST {
                     self
                 }
             }
-            Element::Mult => {
+            Element::Mult => 'mult: {
+
                 // 2)   x * 0 = 0
+                let set_zero: bool = if self.children[0].borrow().equal(&AST_ZERO) {
+                    true
+                } else if self.children[1].borrow().equal(&AST_ZERO) {
+                    true
+                } else {
+                    false
+                };
+
+                if set_zero {
+                    break 'mult AST_ZERO.clone(); // no deep_clone because it has no children
+                }
+
+                // 3)   x * 1 = x
+                let set_to: Option<usize> = if self.children[0].borrow().equal(&AST_ONE) {
+                    // 1 * x
+                    Some(1)
+                } else if self.children[1].borrow().equal(&AST_ONE) {
+                    // x * 1
+                    Some(0)
+                } else {
+                    None
+                };
+
+                if let Some(i) = set_to {
+                    break 'mult self.children[i].borrow().deep_copy(); 
+                }
+
+                let is_exp_with_same_base: bool = 'exp_check: {
+                    if let Element::Exp = self.children[0].borrow().value {
+                    } else {
+                        break 'exp_check false;
+                    }
+
+                    if let Element::Exp = self.children[1].borrow().value {
+                    } else {
+                        break 'exp_check false;
+                    }
+
+                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow(); 
+                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow(); 
+
+                    match (base_0_aux.children.get(0), base_1_aux.children.get(0)) {
+                        (None, None) => false,
+                        (None, Some(_)) => false,
+                        (Some(_), None) => false,
+                        (Some(b1), Some(b2)) => b1.borrow().equal(&b2.borrow()),
+                    }
+
+                };
+
+                if is_exp_with_same_base {
+                    // both children are exponents and have the same base
+                    // x^a + x^b => x^(a+b)
 
 
+                    // a+b
+                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow(); 
+                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow(); 
+                    let sum_exp: AST = AST {
+                        value: Element::Add, 
+                        children: vec![Rc::new(RefCell::new(base_0_aux.children[1].borrow().deep_copy())), 
+                        Rc::new(RefCell::new(base_1_aux.children[1].borrow().deep_copy()))]
+                    }; 
 
+                    // x^(a+b)
+                    let power = AST {
+                        value: Element::Exp, 
+                        children: vec![Rc::new(RefCell::new(base_0_aux.children[0].borrow().deep_copy())), 
+                        Rc::new(RefCell::new(sum_exp))]
+                    }; 
+
+                    break 'mult power; 
+
+                }
 
                 self
-            },
+            }
             Element::Div => todo!(),
             Element::Exp => todo!(),
             Element::Neg => todo!(),
@@ -1019,6 +1154,19 @@ impl AST {
     }
 
     /// Deep copies the [AST]
+    pub fn deep_copy(&self) -> Self {
+        let mut childs: Vec<Rc<RefCell<AST>>> = Vec::with_capacity(self.children.len());
+
+        for child in self.children.iter() {
+            childs.push(Rc::new(RefCell::new(child.borrow().deep_copy())));
+        }
+
+        AST {
+            value: self.value.clone(),
+            children: childs,
+        }
+    }
+    /*
     pub fn deep_copy(&self) -> Self {
         /* //Recursive:
         let mut childs: Vec<Rc<RefCell<AST>>> = Vec::with_capacity(self.children.len());
@@ -1067,7 +1215,7 @@ impl AST {
         return Rc::try_unwrap(ret)
             .expect("Failed to unwrap Rc. ")
             .into_inner();
-    }
+    }*/
 
     pub fn to_string(&self) -> String {
         return match &self.value {
@@ -1217,16 +1365,6 @@ impl AST {
             }
             Element::None => String::from("None"),
         };
-    }
-
-    /// Creates an [AST] containing the given value with no children.
-    ///
-    /// Just serves to reduce boilerplate and increase redability.
-    pub fn from_number(num: Number) -> Self {
-        AST {
-            value: Element::Number(num),
-            children: Vec::new(),
-        }
     }
 
     /// Derives the contents of the given [AST].
