@@ -879,6 +879,10 @@ impl AST {
     }
 
     /// Sorts the given [AST] in a consistent way
+    ///
+    /// Rules
+    /// 1. If a part of the tree that has the same operation and is commutative has brances with and without
+    /// the variable. The ones that contain the variable are going to the index 0 in the list of childs.
     pub fn sort(&mut self) {
         todo!("Implement AST sort");
     }
@@ -993,7 +997,24 @@ impl AST {
             .into_inner());
     }
 
-    pub fn simplify_arithmetical(self) -> Result<Self, String> {
+    /// Simplifies the ast using some basic mathematical identities
+    ///
+    /// 1)   x +- 0 = x
+    /// 2)   x * 0 = 0
+    /// 3)   x * 1 = x
+    /// 4)   0/x = 0            // Even if x = 0, the limit is still 0
+    /// 5)   x/1 = x
+    /// 6)   x/x = 1            // Even if x = 0, the limit is still 1
+    /// 7)   x ^ 1 = x
+    /// 8)   x ^ 0 = 1          // 0^0 = 1
+    /// 10)  1 ^ x = 1
+    /// 11)  x^a * x^b = x^(a+b)
+    /// 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
+    /// 13)  x + a + x = 2*x + a
+    /// 14)  -(-x) = x
+    ///
+    /// Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
+    pub fn simplify_arithmetical(&self) -> Result<Self, String> {
         // Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression]
 
         // 1)   x +- 0 = x
@@ -1004,13 +1025,16 @@ impl AST {
         // 6)   x/x = 1
         // 7)   x ^ 1 = x
         // 8)   x ^ 0 = 1
-        // 9)   x^a * x^b = x^(a+b)
-        // 11)  sqrt(x^(2*a)) = |x|^a    // a is whole
-        // 12)  x + a + x = 2*x + a
-        // 13)  -(-x) = x
+        // 10)  1 ^ x = 1
+        // 11)  x^a * x^b = x^(a+b)
+        // 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
+        // 13)  x + a + x = 2*x + a
+        // 14)  -(-x) = x
+        //
+        // Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
 
         let ret: AST = match self.value {
-            Element::Function(_) => self,
+            Element::Function(_) => self.deep_copy(),
             Element::Add => {
                 // 1) x + 0 = x
 
@@ -1038,7 +1062,7 @@ impl AST {
                     (true, true) => AST::from_number(Number::Rational(0, 1)),
                     (true, false) => self.children[1].borrow().deep_copy(),
                     (false, true) => self.children[0].borrow().deep_copy(),
-                    (false, false) => self,
+                    (false, false) => self.deep_copy(),
                 }
             }
             Element::Sub => {
@@ -1057,11 +1081,10 @@ impl AST {
                 if substitute_1 {
                     self.children[0].borrow().deep_copy()
                 } else {
-                    self
+                    self.deep_copy()
                 }
             }
             Element::Mult => 'mult: {
-
                 // 2)   x * 0 = 0
                 let set_zero: bool = if self.children[0].borrow().equal(&AST_ZERO) {
                     true
@@ -1087,7 +1110,7 @@ impl AST {
                 };
 
                 if let Some(i) = set_to {
-                    break 'mult self.children[i].borrow().deep_copy(); 
+                    break 'mult self.children[i].borrow().deep_copy();
                 }
 
                 let is_exp_with_same_base: bool = 'exp_check: {
@@ -1101,8 +1124,8 @@ impl AST {
                         break 'exp_check false;
                     }
 
-                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow(); 
-                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow(); 
+                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow();
+                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow();
 
                     match (base_0_aux.children.get(0), base_1_aux.children.get(0)) {
                         (None, None) => false,
@@ -1110,47 +1133,119 @@ impl AST {
                         (Some(_), None) => false,
                         (Some(b1), Some(b2)) => b1.borrow().equal(&b2.borrow()),
                     }
-
                 };
 
                 if is_exp_with_same_base {
                     // both children are exponents and have the same base
                     // x^a + x^b => x^(a+b)
 
-
                     // a+b
-                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow(); 
-                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow(); 
+                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow();
+                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow();
                     let sum_exp: AST = AST {
-                        value: Element::Add, 
-                        children: vec![Rc::new(RefCell::new(base_0_aux.children[1].borrow().deep_copy())), 
-                        Rc::new(RefCell::new(base_1_aux.children[1].borrow().deep_copy()))]
-                    }; 
+                        value: Element::Add,
+                        children: vec![
+                            Rc::new(RefCell::new(base_0_aux.children[1].borrow().deep_copy())),
+                            Rc::new(RefCell::new(base_1_aux.children[1].borrow().deep_copy())),
+                        ],
+                    };
 
                     // x^(a+b)
                     let power = AST {
-                        value: Element::Exp, 
-                        children: vec![Rc::new(RefCell::new(base_0_aux.children[0].borrow().deep_copy())), 
-                        Rc::new(RefCell::new(sum_exp))]
-                    }; 
+                        value: Element::Exp,
+                        children: vec![
+                            Rc::new(RefCell::new(base_0_aux.children[0].borrow().deep_copy())),
+                            Rc::new(RefCell::new(sum_exp)),
+                        ],
+                    };
 
-                    break 'mult power; 
-
+                    break 'mult power;
                 }
 
-                self
+                self.deep_copy()
             }
-            Element::Div => todo!(),
-            Element::Exp => todo!(),
-            Element::Neg => todo!(),
+            Element::Div => 'div: {
+                // 4)   0/x = 0
+                if self.children[0].borrow().equal(&AST_ZERO) {
+                    break 'div AST_ZERO.clone(); // no deep_clone because it has no children
+                }
+
+                // 5)   x/1 = x
+                if self.children[1].borrow().equal(&AST_ONE) {
+                    break 'div self.children[0].borrow().deep_copy(); // no deep_clone because it has no children
+                }
+
+                // 6)   x/x = 1
+                if self.children[0].borrow().equal(&self.children[1].borrow()) {
+                    break 'div AST_ONE.clone(); // no deep_clone because it has no children
+                }
+
+                self.deep_copy()
+            }
+            Element::Exp => 'exp: {
+                // 7)   x ^ 1 = x
+                if self.children[1].borrow().equal(&AST_ONE) {
+                    break 'exp self.children[0].borrow().deep_copy(); // no deep_clone because it has no children
+                }
+
+                // 8)   x ^ 0 = 1
+                if self.children[1].borrow().equal(&AST_ZERO) {
+                    break 'exp AST_ONE.clone(); // no deep_clone because it has no children
+                }
+                // 10)  1 ^ x = 1
+                if self.children[0].borrow().equal(&AST_ONE) {
+                    break 'exp AST_ONE.clone(); // no deep_clone because it has no children
+                }
+
+                self.deep_copy()
+            }
+            Element::Neg => {
+                // 14)  -(-x) = x
+                if self.children[0].borrow().value == Element::Neg {
+                    self.children[0].borrow().children[0].borrow().deep_copy()
+                } else {
+                    self.deep_copy()
+                }
+            }
             _ => {
                 // No simplification for:
                 //      derive, None, Number, mod, fact, var
-                self
+                self.deep_copy()
             }
         };
 
         return Ok(ret);
+    }
+
+    /// Joins terms into a simplified version of the [AST]
+    ///
+    /// This function works when [self] has a value of [Element::Add], [Element::Mult]
+    /// and it's children that contain the same element. Then, it performs simplifications:
+    /// 1) x + x + ... + x = n * x      //n is whole
+    /// 2) a * x + b * (-x) = (a-b) * x
+    /// 3) x * x * ... * x = n ^ x
+    /// 4) x^a * x^b * ... * x^n= x^(a+b+ ... +n)
+    ///
+    /// It may also reorder terms
+    pub fn join_terms(self) -> Result<Self, String> {
+        Ok(self)
+    }
+
+    /// If the given node is a substraction it changes it to the addition of a negated value
+    ///
+    /// otherwise does nothing
+    fn sub_to_neg(&mut self) {
+        if self.value != Element::Neg {
+            return;
+        }
+
+        let neg: AST = AST {
+            value: Element::Neg,
+            children: vec![self.children.pop().unwrap()],
+        };
+
+        self.value = Element::Add;
+        self.children.push(Rc::new(RefCell::new(neg)));
     }
 
     /// Deep copies the [AST]
