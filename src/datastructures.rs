@@ -1,5 +1,6 @@
 use core::fmt;
-use std::{cell::RefCell, collections::VecDeque, iter::zip, ops, rc::Rc, vec};
+use std::{cell::RefCell, iter::zip, ops, rc::Rc, vec};
+use rand::{Rng, SeedableRng};
 
 use crate::functions::Functions;
 
@@ -992,9 +993,13 @@ impl AST {
             }
         }
 
-        return Ok(Rc::try_unwrap(original_node)
+        let arithmetical = Rc::try_unwrap(original_node)
             .expect("Failed to unwrap Rc. ")
-            .into_inner());
+            .into_inner();
+
+        let ret: AST = arithmetical.simplify_arithmetical()?; 
+
+        return Ok(ret);
     }
 
     /// Simplifies the ast using some basic mathematical identities
@@ -1002,19 +1007,20 @@ impl AST {
     /// 1)   x +- 0 = x
     /// 2)   x * 0 = 0
     /// 3)   x * 1 = x
-    /// 4)   0/x = 0            // Even if x = 0, the limit is still 0
+    /// 4)   0/x = 0
     /// 5)   x/1 = x
-    /// 6)   x/x = 1            // Even if x = 0, the limit is still 1
+    /// 6)   x/x = 1
     /// 7)   x ^ 1 = x
-    /// 8)   x ^ 0 = 1          // 0^0 = 1
+    /// 8)   x ^ 0 = 1
     /// 10)  1 ^ x = 1
-    /// 11)  x^a * x^b = x^(a+b)
     /// 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
     /// 13)  x + a + x = 2*x + a
     /// 14)  -(-x) = x
     ///
     /// Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
-    pub fn simplify_arithmetical(&self) -> Result<Self, String> {
+    /// 11)  x^a * x^b = x^(a+b)         (done in join_terms)
+    ///
+    fn simplify_arithmetical(self) -> Result<Self, String> {
         // Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression]
 
         // 1)   x +- 0 = x
@@ -1026,15 +1032,21 @@ impl AST {
         // 7)   x ^ 1 = x
         // 8)   x ^ 0 = 1
         // 10)  1 ^ x = 1
-        // 11)  x^a * x^b = x^(a+b)
         // 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
         // 13)  x + a + x = 2*x + a
         // 14)  -(-x) = x
         //
         // Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
+        // 11)  x^a * x^b = x^(a+b)         (done in join_terms)
 
-        let ret: AST = match self.value {
-            Element::Function(_) => self.deep_copy(),
+        let mut rnd: rand::prelude::ThreadRng = rand::thread_rng();
+        let call_id: f64 = rnd.gen::<f64>(); 
+
+        println!("In [{:.4}]: {:?}", call_id, self.to_string()); 
+
+
+        let mut ret: AST = match self.value {
+            Element::Function(_) => self,
             Element::Add => {
                 // 1) x + 0 = x
 
@@ -1062,7 +1074,7 @@ impl AST {
                     (true, true) => AST::from_number(Number::Rational(0, 1)),
                     (true, false) => self.children[1].borrow().deep_copy(),
                     (false, true) => self.children[0].borrow().deep_copy(),
-                    (false, false) => self.deep_copy(),
+                    (false, false) => self,
                 }
             }
             Element::Sub => {
@@ -1081,7 +1093,7 @@ impl AST {
                 if substitute_1 {
                     self.children[0].borrow().deep_copy()
                 } else {
-                    self.deep_copy()
+                    self
                 }
             }
             Element::Mult => 'mult: {
@@ -1113,6 +1125,8 @@ impl AST {
                     break 'mult self.children[i].borrow().deep_copy();
                 }
 
+                // done in join terms
+                /*
                 let is_exp_with_same_base: bool = 'exp_check: {
                     if let Element::Exp = self.children[0].borrow().value {
                     } else {
@@ -1160,9 +1174,9 @@ impl AST {
                     };
 
                     break 'mult power;
-                }
+                }*/
 
-                self.deep_copy()
+                self
             }
             Element::Div => 'div: {
                 // 4)   0/x = 0
@@ -1180,7 +1194,7 @@ impl AST {
                     break 'div AST_ONE.clone(); // no deep_clone because it has no children
                 }
 
-                self.deep_copy()
+                self
             }
             Element::Exp => 'exp: {
                 // 7)   x ^ 1 = x
@@ -1197,22 +1211,48 @@ impl AST {
                     break 'exp AST_ONE.clone(); // no deep_clone because it has no children
                 }
 
-                self.deep_copy()
+                self
             }
             Element::Neg => {
                 // 14)  -(-x) = x
                 if self.children[0].borrow().value == Element::Neg {
                     self.children[0].borrow().children[0].borrow().deep_copy()
                 } else {
-                    self.deep_copy()
+                    self
                 }
             }
             _ => {
                 // No simplification for:
                 //      derive, None, Number, mod, fact, var
-                self.deep_copy()
+                self
             }
         };
+
+        // Do the same recursively for the children
+
+        let updated: Result<Vec<AST>, String> = ret
+            .children
+            .into_iter()
+            .map(|child: Rc<RefCell<AST>>| 'clos: {
+                // simplify aritmetically recursively
+                let simplified: Result<AST, String> =
+                    child.borrow().deep_copy().simplify_arithmetical();
+                break 'clos simplified; 
+                
+                match simplified {
+                    Ok(ast) => ast.join_terms(),
+                    Err(e) => Err(e),
+                }
+            })
+            .collect();
+
+        ret.children = updated?
+            .into_iter()
+            .map(|updated| Rc::new(RefCell::new(updated)))
+            .collect();
+
+
+        println!("Out [{:.4}]: {:?}\n", call_id, ret.to_string()); 
 
         return Ok(ret);
     }
@@ -1222,13 +1262,125 @@ impl AST {
     /// This function works when [self] has a value of [Element::Add], [Element::Mult]
     /// and it's children that contain the same element. Then, it performs simplifications:
     /// 1) x + x + ... + x = n * x      //n is whole
-    /// 2) a * x + b * (-x) = (a-b) * x
     /// 3) x * x * ... * x = n ^ x
+    /// To be implemented:
+    /// 2) a * x + b * (-x) = (a-b) * x
     /// 4) x^a * x^b * ... * x^n= x^(a+b+ ... +n)
     ///
-    /// It may also reorder terms
+    /// x can be any expresion, not just the variable. It may also reorder terms
     pub fn join_terms(self) -> Result<Self, String> {
-        Ok(self)
+        let (operation, operation_joiner): (Element, Element) = match self.value {
+            Element::Add => (Element::Add, Element::Mult),
+            Element::Mult => (Element::Mult, Element::Exp),
+            _ => return Ok(self),
+        };
+        // operation is the operation we are working with, operation_joiner is the operator that
+        // allows us to join multiple of the same elements into one.
+
+        // childs vec will contain the childs of self with the same element as self
+        let mut childs: Vec<Rc<RefCell<AST>>> = Vec::new();
+
+        {
+            let mut stack: Vec<Rc<RefCell<AST>>> = vec![Rc::new(RefCell::new(self))];
+
+            while let Some(ast) = stack.pop() {
+                if ast.borrow().value == operation {
+                    ast.borrow()
+                        .children
+                        .iter()
+                        .for_each(|ch| stack.push(Rc::clone(ch)));
+                } else {
+                    childs.push(Rc::clone(&ast));
+                }
+            }
+            // assert!(stack.len() == 0);
+        }
+
+        // groups will contain each of the AST children and the ammount of times it has been seen.
+        let mut groups: Vec<Rc<RefCell<AST>>> = Vec::new();
+        while let Some(ast) = childs.pop() {
+            let mut counter: u32 = 1; // 1 is ast
+
+            while let Some(other_ast_index) = childs
+                .iter()
+                .position(|ch| ast.borrow().equal(&ch.borrow()))
+            {
+                // some other child is exacly the same as the current one
+                counter += 1;
+                childs.swap_remove(other_ast_index);
+            }
+            // create an AST that joins the elements accordingly
+            groups.push(Rc::new(RefCell::new(AST {
+                value: operation_joiner.clone(),
+                children: vec![
+                    ast,
+                    Rc::new(RefCell::new(AST::from_number(Number::Rational(
+                        counter as i64,
+                        1,
+                    )))),
+                ],
+            })));
+        }
+
+        // Now we need to join all the elements into a the AST structure
+
+        let mut base_layer: Vec<Rc<RefCell<AST>>> = groups;
+        let mut upper_layer: Vec<Rc<RefCell<AST>>> =
+            Vec::with_capacity((base_layer.len() >> 1) + 1);
+        let mut missing: Option<Rc<RefCell<AST>>> = None;
+        // ^ missing is meeded if the number if elements in base_layer is not even.
+        // It acts as a "carry" for the next iteration
+
+        while 1 < base_layer.len() {
+            for i in 0..(base_layer.len() >> 1) {
+                let left: Rc<RefCell<AST>> = Rc::clone(&base_layer[i * 2]);
+                let right: Rc<RefCell<AST>> = Rc::clone(&base_layer[i * 2 + 1]);
+                upper_layer.push(Rc::new(RefCell::new(AST {
+                    value: operation.clone(),
+                    children: vec![left, right],
+                })));
+            }
+
+            if base_layer.len() & 1 == 1 {
+                // = is odd
+                missing = match missing {
+                    None => Some(base_layer.pop().unwrap()),
+                    Some(miss) => {
+                        upper_layer.push(Rc::new(RefCell::new(AST {
+                            value: operation.clone(),
+                            children: vec![miss, base_layer.pop().unwrap()],
+                        })));
+                        None
+                    }
+                }
+            }
+
+            base_layer.clear();
+            base_layer = upper_layer.drain(0..).collect();
+            upper_layer.clear();
+        }
+
+        assert!(base_layer.len() == 1);
+
+        // if we have a missing carry, ajust
+        match missing {
+            Some(miss) => {
+                let final_elem: Rc<RefCell<AST>> = base_layer.pop().unwrap();
+
+                base_layer.push(Rc::new(RefCell::new(AST {
+                    value: operation.clone(),
+                    children: vec![miss, final_elem],
+                })))
+            }
+            None => {}
+        }
+
+        // Return properly as AST
+
+        let ret: AST = Rc::try_unwrap(base_layer.pop().unwrap())
+            .expect("Failed to unwrap Rc pointer in join_terms. ")
+            .into_inner();
+        Ok(ret)
     }
 
     /// If the given node is a substraction it changes it to the addition of a negated value
