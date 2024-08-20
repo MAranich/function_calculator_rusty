@@ -1,6 +1,7 @@
 use core::fmt;
 use std::{cell::RefCell, iter::zip, ops, rc::Rc, vec};
-use rand::{Rng, SeedableRng};
+use rand::Rng;
+use integer_sqrt::IntegerSquareRoot; 
 
 use crate::functions::Functions;
 
@@ -9,6 +10,19 @@ const INITIAL_STATE: u16 = 1;
 
 /// Represents the rejecting state in all [DFA].
 const REJECTING_STATE: u16 = 0;
+
+/// When printing a [Number] of the [Number::Rational] variant, 
+/// if both numbers numbers have an absolute value less than [PRINT_FRACTION_PRECISION_THRESHOLD], 
+/// it will be printed as a fraction ( numerator/denominator ). Otherwise, a numerical 
+/// representation will be used. 
+pub const PRINT_FRACTION_PRECISION_THRESHOLD: i32 = 1024; 
+
+/// If printing a number with a fractionary expansion and all the 
+/// digits are not needed, the result will be truncated to [PRINT_NUMBER_DIGITS] digits. 
+/// 
+/// Regardless of how they are displayed, all the number are always processed 
+/// with maximum precision. 
+pub const PRINT_NUMBER_DIGITS: u32 = 4; 
 
 pub const ADD_STR: &'static str = "+";
 pub const SUB_STR: &'static str = "-";
@@ -1016,6 +1030,7 @@ impl AST {
     /// 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
     /// 13)  x + a + x = 2*x + a
     /// 14)  -(-x) = x
+    /// Unimplemented: 15) (a/b) / (c/d) = a*d / (b*c)
     ///
     /// Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
     /// 11)  x^a * x^b = x^(a+b)         (done in join_terms)
@@ -1594,7 +1609,7 @@ impl AST {
 
                 format!("{}%{}", left_side, right_side)
             }
-            Element::Number(number) => number.get_numerical().to_string(),
+            Element::Number(number) => number.as_str(),
             Element::Var => String::from("x"),
             Element::Neg => {
                 let child_left: std::cell::Ref<AST> = self.children[0].borrow();
@@ -2193,10 +2208,34 @@ impl Number {
     pub fn is_perfect_square(x: i64) -> Option<i64> {
         //Perfec number info: https://en.wikipedia.org/wiki/Square_number
 
+        
         if x < 0 {
             // no negative numbers
             return None;
         }
+
+        if x == 0 {
+            return Some(0); 
+        }
+        
+        // TODO: do better again
+        // Claim: in binary, after removing an even number of 0 at the end 
+        // of a perfect square, it's final digits are "001"
+        let mut n: i64 = x; 
+        while (n & (0b11 as i64)) == 0 {
+            //ends with 00
+            n = n >> 2; 
+            // loop must terminate because input contains at least 1 bit set to 1
+        }
+
+        if (n & (0b111 as i64)) == 1 {
+            // is perfect square; ends with 001
+            return Some(x.integer_sqrt()); 
+        } else {
+            return None; 
+        }
+
+        /*
 
         //No square ends with the digit 2, 3, 7, or 8.
         let remainder: i64 = x % 10;
@@ -2219,6 +2258,36 @@ impl Number {
         }
 
         return None;
+        
+        */
+    }
+
+    pub fn scan_perfect_square(x: i64) -> bool {
+
+        if x < 0 {
+            // no negative numbers
+            return false;
+        }
+
+        if x == 0 {
+            // discard annoying case. 
+            return true; 
+        }
+        
+        // TODO: do better again
+        // Fact: in binary, after removing an even number of 0 at the end 
+        // of a perfect square, it's final digits are "001"
+        // However some non-perfets square numbers do pass the test
+        // accuracy up to 2**36 = 83.33371480111964%
+        let mut n: i64 = x; 
+        while (n & (0b11 as i64)) == 0 {
+            //ends with 00
+            n = n >> 2; 
+            // loop must terminate because input contains at least 1 bit set to 1
+        }
+
+        return (n & (0b111 as i64)) == 1; 
+
     }
 
     /// Get the numerical value of Self.
@@ -2398,7 +2467,36 @@ impl Number {
 
     /// Returns the number as a string.
     pub fn as_str(&self) -> String {
-        return self.get_numerical().to_string();
+
+        if let Number::Rational(num, den) = self {
+            if num.abs() <= PRINT_FRACTION_PRECISION_THRESHOLD as i64 && *den < PRINT_FRACTION_PRECISION_THRESHOLD as u64 {
+                // small enough number, print as just num/den
+                return if den == &1 {
+                    // is integer
+                    format!("{}", num)
+                } else {
+                    format!("{}/{}", num, den)
+                };
+            }
+        }
+
+        let mut full_string: String = self.get_numerical().to_string(); 
+
+        let mut counter: u32 = 0; 
+        for (i, c) in full_string.char_indices() {
+            if PRINT_NUMBER_DIGITS < counter {
+                full_string.truncate(i + 1);
+                return full_string;
+            }
+            if c == '.' || 0 < counter  {
+                counter = counter + 1; 
+            }
+        }
+
+        //not enough decimal digits, just return the number. 
+        return full_string; 
+
+        //return format!("{:.PRINT_NUMBER_DIGITS} ", self.get_numerical()); 
     }
 }
 
@@ -2563,7 +2661,10 @@ impl fmt::Debug for Number {
         match self {
             Number::Real(r) => write!(f, "{} ", r),
             Number::Rational(num, den) => {
-                write!(f, "{}/{} ~= {}", num, den, *num as f64 / *den as f64)
+
+
+
+                write!(f, "{}/{} ~= {} ", num, den, *num as f64 / *den as f64)
             }
         }
         //f.debug_struct("Number").field("value", &self.value).finish()
