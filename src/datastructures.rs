@@ -1,7 +1,7 @@
 use core::fmt;
-use std::{cell::RefCell, iter::zip, ops, rc::Rc, vec};
+use integer_sqrt::IntegerSquareRoot;
 use rand::Rng;
-use integer_sqrt::IntegerSquareRoot; 
+use std::{cell::RefCell, iter::zip, ops, rc::Rc, vec};
 
 use crate::functions::Functions;
 
@@ -11,18 +11,18 @@ const INITIAL_STATE: u16 = 1;
 /// Represents the rejecting state in all [DFA].
 const REJECTING_STATE: u16 = 0;
 
-/// When printing a [Number] of the [Number::Rational] variant, 
-/// if both numbers numbers have an absolute value less than [PRINT_FRACTION_PRECISION_THRESHOLD], 
-/// it will be printed as a fraction ( numerator/denominator ). Otherwise, a numerical 
-/// representation will be used. 
-pub const PRINT_FRACTION_PRECISION_THRESHOLD: i32 = 1024; 
+/// When printing a [Number] of the [Number::Rational] variant,
+/// if both numbers numbers have an absolute value less than [PRINT_FRACTION_PRECISION_THRESHOLD],
+/// it will be printed as a fraction ( numerator/denominator ). Otherwise, a numerical
+/// representation will be used.
+pub const PRINT_FRACTION_PRECISION_THRESHOLD: i32 = 1024;
 
-/// If printing a number with a fractionary expansion and all the 
-/// digits are not needed, the result will be truncated to [PRINT_NUMBER_DIGITS] digits. 
-/// 
-/// Regardless of how they are displayed, all the number are always processed 
-/// with maximum precision. 
-pub const PRINT_NUMBER_DIGITS: u32 = 4; 
+/// If printing a number with a fractionary expansion and all the
+/// digits are not needed, the result will be truncated to [PRINT_NUMBER_DIGITS] digits.
+///
+/// Regardless of how they are displayed, all the number are always processed
+/// with maximum precision.
+pub const PRINT_NUMBER_DIGITS: u32 = 4;
 
 pub const ADD_STR: &'static str = "+";
 pub const SUB_STR: &'static str = "-";
@@ -1011,7 +1011,7 @@ impl AST {
             .expect("Failed to unwrap Rc. ")
             .into_inner();
 
-        let ret: AST = arithmetical.simplify_arithmetical()?; 
+        let ret: AST = arithmetical.simplify_arithmetical()?;
 
         return Ok(ret);
     }
@@ -1055,10 +1055,9 @@ impl AST {
         // 11)  x^a * x^b = x^(a+b)         (done in join_terms)
 
         let mut rnd: rand::prelude::ThreadRng = rand::thread_rng();
-        let call_id: f64 = rnd.gen::<f64>(); 
+        let call_id: f64 = rnd.gen::<f64>();
 
-        println!("In [{:.4}]: {:?}", call_id, self.to_string()); 
-
+        println!("In [{:.4}]: {:?}", call_id, self.to_string());
 
         let mut ret: AST = match self.value {
             Element::Function(_) => self,
@@ -1252,8 +1251,8 @@ impl AST {
                 // simplify aritmetically recursively
                 let simplified: Result<AST, String> =
                     child.borrow().deep_copy().simplify_arithmetical();
-                break 'clos simplified; 
-                
+                break 'clos simplified;
+
                 match simplified {
                     Ok(ast) => ast.join_terms(),
                     Err(e) => Err(e),
@@ -1266,8 +1265,7 @@ impl AST {
             .map(|updated| Rc::new(RefCell::new(updated)))
             .collect();
 
-
-        println!("Out [{:.4}]: {:?}\n", call_id, ret.to_string()); 
+        println!("Out [{:.4}]: {:?}\n", call_id, ret.to_string());
 
         return Ok(ret);
     }
@@ -2201,39 +2199,103 @@ impl Number {
         }
     }
 
+
+    /// Determinates if the given integer is a perfect squer or not.
+    pub fn scan_perfect_square(x: i64) -> bool {
+        //Perfec number info: https://en.wikipedia.org/wiki/Square_number
+
+        /*
+
+        // fast method:
+        let sqrt: i64 = (x as f64).sqrt().floor() as i64;
+        let _is_perf_sq: bool = sqrt * sqrt == i;
+        // can fail for 2^52 < x
+        */
+
+        if x <= 0 {
+            // no negative numbers are perf squares
+            // and discard annoying case x = 0, wich is true
+            return x == 0;
+        }
+
+        // Fact: in binary, after removing an even number of 0 at the end
+        // of a perfect square, it's final digits are "001"
+        // However some non-perfets square numbers do pass the test
+        // accuracy up to 2**36 = 83.33371480111964%
+        let mut n: i64 = x;
+        while (n & (0b11 as i64)) == 0 {
+            //ends with 00
+            n = n >> 2;
+            // loop must terminate because input contains at least 1 bit set to 1
+        }
+
+        if (n & (0b111 as i64)) != 1 {
+            return false;
+        }
+
+        // Use binary search to find correct result
+
+        // use bounds to aproximate sqrt(x) to shorten binary search iterations
+        let log: u32 = n.ilog2();
+        let aprox: u64 = 1u64 << (log >> 1);
+        let mut left: u64 = aprox - 1;
+        let mut right: u64 = aprox * 2 + 1;
+
+        while left <= right {
+            let mid: u64 = left + (right - left) / 2;
+            let square: u64 = mid * mid;
+
+            match square.cmp(&(n as u64)) {
+                std::cmp::Ordering::Equal => return true,
+                std::cmp::Ordering::Less => left = mid + 1,
+                std::cmp::Ordering::Greater => right = mid - 1,
+            }
+        }
+
+        return false;
+    }
+
     /// Determinates if the given integer is a perfect squer or not.
     ///
     /// If it is, returns
     /// Some() with the square root as an integer. Otherwise returns None.  
+    /// See the implementation of [Number::scan_perfect_square] for the 
+    /// details on how it works. This is a readapted version of that code. 
     pub fn is_perfect_square(x: i64) -> Option<i64> {
         //Perfec number info: https://en.wikipedia.org/wiki/Square_number
 
-        
-        if x < 0 {
-            // no negative numbers
+        match x.cmp(&0) {
+            std::cmp::Ordering::Less => return None,
+            std::cmp::Ordering::Equal => return Some(0),
+            std::cmp::Ordering::Greater => {},
+        }
+
+        let mut n: i64 = x;
+        while (n & (0b11 as i64)) == 0 {
+            n = n >> 2;
+        }
+
+        if (n & (0b111 as i64)) != 1 {
             return None;
         }
 
-        if x == 0 {
-            return Some(0); 
-        }
-        
-        // TODO: do better again
-        // Claim: in binary, after removing an even number of 0 at the end 
-        // of a perfect square, it's final digits are "001"
-        let mut n: i64 = x; 
-        while (n & (0b11 as i64)) == 0 {
-            //ends with 00
-            n = n >> 2; 
-            // loop must terminate because input contains at least 1 bit set to 1
+        let log: u32 = n.ilog2();
+        let aprox: u64 = 1u64 << (log >> 1);
+        let mut left: u64 = aprox - 1;
+        let mut right: u64 = aprox * 2 + 1;
+
+        while left <= right {
+            let mid: u64 = left + (right - left) / 2;
+            let square: u64 = mid * mid;
+
+            match square.cmp(&(n as u64)) {
+                std::cmp::Ordering::Equal => return Some(mid as i64),
+                std::cmp::Ordering::Less => left = mid + 1,
+                std::cmp::Ordering::Greater => right = mid - 1,
+            }
         }
 
-        if (n & (0b111 as i64)) == 1 {
-            // is perfect square; ends with 001
-            return Some(x.integer_sqrt()); 
-        } else {
-            return None; 
-        }
+        return None;
 
         /*
 
@@ -2258,36 +2320,8 @@ impl Number {
         }
 
         return None;
-        
+
         */
-    }
-
-    pub fn scan_perfect_square(x: i64) -> bool {
-
-        if x < 0 {
-            // no negative numbers
-            return false;
-        }
-
-        if x == 0 {
-            // discard annoying case. 
-            return true; 
-        }
-        
-        // TODO: do better again
-        // Fact: in binary, after removing an even number of 0 at the end 
-        // of a perfect square, it's final digits are "001"
-        // However some non-perfets square numbers do pass the test
-        // accuracy up to 2**36 = 83.33371480111964%
-        let mut n: i64 = x; 
-        while (n & (0b11 as i64)) == 0 {
-            //ends with 00
-            n = n >> 2; 
-            // loop must terminate because input contains at least 1 bit set to 1
-        }
-
-        return (n & (0b111 as i64)) == 1; 
-
     }
 
     /// Get the numerical value of Self.
@@ -2467,9 +2501,10 @@ impl Number {
 
     /// Returns the number as a string.
     pub fn as_str(&self) -> String {
-
         if let Number::Rational(num, den) = self {
-            if num.abs() <= PRINT_FRACTION_PRECISION_THRESHOLD as i64 && *den < PRINT_FRACTION_PRECISION_THRESHOLD as u64 {
+            if num.abs() <= PRINT_FRACTION_PRECISION_THRESHOLD as i64
+                && *den < PRINT_FRACTION_PRECISION_THRESHOLD as u64
+            {
                 // small enough number, print as just num/den
                 return if den == &1 {
                     // is integer
@@ -2480,23 +2515,23 @@ impl Number {
             }
         }
 
-        let mut full_string: String = self.get_numerical().to_string(); 
+        let mut full_string: String = self.get_numerical().to_string();
 
-        let mut counter: u32 = 0; 
+        let mut counter: u32 = 0;
         for (i, c) in full_string.char_indices() {
             if PRINT_NUMBER_DIGITS < counter {
                 full_string.truncate(i + 1);
                 return full_string;
             }
-            if c == '.' || 0 < counter  {
-                counter = counter + 1; 
+            if c == '.' || 0 < counter {
+                counter = counter + 1;
             }
         }
 
-        //not enough decimal digits, just return the number. 
-        return full_string; 
+        //not enough decimal digits, just return the number.
+        return full_string;
 
-        //return format!("{:.PRINT_NUMBER_DIGITS} ", self.get_numerical()); 
+        //return format!("{:.PRINT_NUMBER_DIGITS} ", self.get_numerical());
     }
 }
 
@@ -2661,9 +2696,6 @@ impl fmt::Debug for Number {
         match self {
             Number::Real(r) => write!(f, "{} ", r),
             Number::Rational(num, den) => {
-
-
-
                 write!(f, "{}/{} ~= {} ", num, den, *num as f64 / *den as f64)
             }
         }
