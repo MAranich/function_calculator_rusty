@@ -2199,7 +2199,6 @@ impl Number {
         }
     }
 
-
     /// Determinates if the given integer is a perfect squer or not.
     pub fn scan_perfect_square(x: i64) -> bool {
         //Perfec number info: https://en.wikipedia.org/wiki/Square_number
@@ -2259,15 +2258,15 @@ impl Number {
     ///
     /// If it is, returns
     /// Some() with the square root as an integer. Otherwise returns None.  
-    /// See the implementation of [Number::scan_perfect_square] for the 
-    /// details on how it works. This is a readapted version of that code. 
+    /// See the implementation of [Number::scan_perfect_square] for the
+    /// details on how it works. This is a readapted version of that code.
     pub fn is_perfect_square(x: i64) -> Option<i64> {
         //Perfec number info: https://en.wikipedia.org/wiki/Square_number
 
         match x.cmp(&0) {
             std::cmp::Ordering::Less => return None,
             std::cmp::Ordering::Equal => return Some(0),
-            std::cmp::Ordering::Greater => {},
+            std::cmp::Ordering::Greater => {}
         }
 
         let mut n: i64 = x;

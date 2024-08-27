@@ -275,31 +275,28 @@ Proof square modulo 6:
 #[test]
 #[ignore = "Long"]
 fn perf_square_speed() {
-
-    let zero: Instant = Instant::now(); 
+    let zero: Instant = Instant::now();
     let search: i32 = 32;
     (0..(1 << search)).into_iter().for_each(|i| {
+        let _is_perf_sq: bool = Number::scan_perfect_square(i);
+        //let sqrt: i64 = (i as f64).sqrt().floor() as i64;
+        //let _is_perf_sq: bool = sqrt * sqrt == i;
+    });
 
-        let _is_perf_sq: bool = Number::scan_perfect_square(i); 
-        //let sqrt: i64 = (i as f64).sqrt().floor() as i64; 
-        //let _is_perf_sq: bool = sqrt * sqrt == i; 
+    let time_length: std::time::Duration = Instant::now() - zero;
 
-    }); 
+    println!("Total time: {:.4}", time_length.as_secs_f32());
 
-    let time_length: std::time::Duration = Instant::now() - zero; 
+    assert!(time_length < std::time::Duration::from_secs(160));
 
-    println!("Total time: {:.4}", time_length.as_secs_f32()); 
-
-    assert!(time_length < std::time::Duration::from_secs(160)); 
-
-    // This should not take longer than 160 s. 
+    // This should not take longer than 160 s.
 
     /*
     Test: 2^32
         Basic   :  37.74 s
         New     :  66.27 s  (1.75x)
     Test: 2^38
-        Basic   :  77.65 s  
+        Basic   :  77.65 s
         New     : 133.80 s  (1.72x)
     V2: 2^32
         Basic       :  (91.01, 93.22, 93.24)    s (1.0x)
@@ -307,12 +304,10 @@ fn perf_square_speed() {
         Un-opt      :  (565.04, 568.99, 561.52) s (6.14x)
         mod 16      :  (190.98, 195.16, 193.93) s (2,1x)
         No Bounds   :  (236.75, 238.49, 231.97) s (2.56x)
-        Bin search  :  (1098.06, 1079.74, 1149.81)  s (12.06x) 
-     
+        Bin search  :  (1098.06, 1079.74, 1149.81)  s (12.06x)
+
      */
-
 }
-
 
 #[test]
 #[ignore = "Long"]
@@ -321,7 +316,7 @@ fn is_perfect_square_test() {
 
     let search: i32 = 20;
     let mut fails: Vec<(i64, bool, bool)> = Vec::new();
-    let mut counter: u64 = 0; 
+    let mut counter: u64 = 0;
     //for i in 0..i64::MAX {
     for i in 0..(1 << search) {
         let decision: bool = Number::scan_perfect_square(i); // predicted is perf_sqrt
@@ -332,14 +327,13 @@ fn is_perfect_square_test() {
 
         if decision != true_ground {
             fails.push((i, decision, true_ground));
-            counter += 1; 
-
+            counter += 1;
         }
 
         /*if !decision && true_ground {
             // decision => true_ground
             fails.push((i, decision, true_ground));
-            counter += 1; 
+            counter += 1;
         }*/
     }
     /*
@@ -352,14 +346,13 @@ fn is_perfect_square_test() {
         );
     */
 
-
-    println!("(number, decision, ground truth)\n"); 
+    println!("(number, decision, ground truth)\n");
     let summary: Vec<(i64, bool, bool)> = fails
         .into_iter()
         .take(20)
         .collect::<Vec<(i64, bool, bool)>>();
 
-    println!("Counter: {}", counter); 
+    println!("Counter: {}", counter);
     assert!(counter == 0, "{}    {:?}", counter, summary);
     //assert!(fails.len() == 0, "{:?}", fails);
 
@@ -492,21 +485,21 @@ fn confusion_matrix_pref_sq() {
     );
 
     if reduced.true_positives + reduced.true_negatives == sum {
-        println!("SUCCESS! "); 
+        println!("SUCCESS! ");
     }
 
     println!("\n");
     panic!("I need to know the results! ");
 
     /*
-    
+
     Basic test: (checking number finishes with ...001r00)
         Accuracy: 83.33638496696949%  (2^30)
-    
-    Test + Binary search 1: 
+
+    Test + Binary search 1:
         Accuracy: 99.99695951119065%  (2^30)
         Accuracy: 99.99946101743262%  (2^35)
-    Test + Binary search corrected: 
+    Test + Binary search corrected:
         Accuracy: 100%      (2^22)
         Accuracy: 100%      (2^30)
         Accuracy: 100%      (2^35)
@@ -575,7 +568,6 @@ fn pattern_perf_squares() {
             })
             .0
     );
-
 }
 
 #[test]
@@ -592,9 +584,30 @@ fn test_ilogs() {
 
     */
 
-    let mut v: Vec<i32> = vec![1, 2, 3, 4, 5, 10, 15, 20, 63, 64, 155, 255, 256, 257, 916, 33*2, 45*4, 534, 5436, 12*12]; 
+    let mut v: Vec<i32> = vec![
+        1,
+        2,
+        3,
+        4,
+        5,
+        10,
+        15,
+        20,
+        63,
+        64,
+        155,
+        255,
+        256,
+        257,
+        916,
+        33 * 2,
+        45 * 4,
+        534,
+        5436,
+        12 * 12,
+    ];
 
-    v.sort_unstable(); 
+    v.sort_unstable();
 
     let r: Vec<(i32, u32)> = v
         .iter()
@@ -606,8 +619,8 @@ fn test_ilogs() {
         .map(|a| {
             let (x, y) = a;
             //(x, y, i32::ilog2(x), i32::ilog2((y as f64).sqrt() as i32))
-            let log_y: u32 = i32::ilog2(y); 
-            let lower: u32 = 1u32 << (log_y >> 1); //left 
+            let log_y: u32 = i32::ilog2(y);
+            let lower: u32 = 1u32 << (log_y >> 1); //left
             let upper: u32 = lower << 2; // right
             ((x, i32::ilog2(x)), (y, log_y), (lower, upper))
         })
@@ -617,28 +630,12 @@ fn test_ilogs() {
 
     t.iter().for_each(|x|
         //println!("{:?}", x)
-        println!("sqrt({}) = {} in [{}, {}]\t", x.1.0, x.0.0, x.2.0, x.2.1)
-    
-    ); 
+        println!("sqrt({}) = {} in [{}, {}]\t", x.1.0, x.0.0, x.2.0, x.2.1));
 
-    let proof: bool = t.iter().all(|x| x.2.0 <= x.0.0 as u32 && x.0.0 as u32 <= x.2.1 ); 
-    println!("Condition: {}", proof); 
+    let proof: bool = t
+        .iter()
+        .all(|x| x.2 .0 <= x.0 .0 as u32 && x.0 .0 as u32 <= x.2 .1);
+    println!("Condition: {}", proof);
 
     assert!(proof);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

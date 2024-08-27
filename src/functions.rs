@@ -77,7 +77,8 @@ impl Functions {
                                 Ok(Number::new_real((num as f64).sqrt() / (d as f64)))
                             }
                             (Some(n), None) => {
-                                /*Use rationalitzation for better numerical performance:
+                                /*
+                                Use rationalitzation for better numerical performance:
                                 a/sqrt(b) = a * sqrt(b)/sqrt(b) * sqrt(b) = a * sqrt(b) / b
                                 */
                                 let d: f64 = den as f64;
@@ -160,10 +161,10 @@ impl Functions {
     }
 
     /// Derivate a function
-    /// 
-    /// The current [AST] node must have the [AST::value] with the variant [Element::Function] 
-    /// with a regognized function. Some parts of the expression may be evaluated, therefore, if the expression 
-    /// is invalid, the function may return an error. 
+    ///
+    /// The current [AST] node must have the [AST::value] with the variant [Element::Function]
+    /// with a regognized function. Some parts of the expression may be evaluated, therefore, if the expression
+    /// is invalid, the function may return an error.
     pub fn func_derive(input: &AST) -> Result<AST, String> {
         let function_name: &String = if let Element::Function(iden) = &input.value {
             iden
@@ -464,8 +465,8 @@ impl Functions {
                 };
 
                 AST {
-                    value: Element::Mult, 
-                    children: vec![Rc::new(RefCell::new(sign)), Rc::new(RefCell::new(der))]
+                    value: Element::Mult,
+                    children: vec![Rc::new(RefCell::new(sign)), Rc::new(RefCell::new(der))],
                 }
             }
             _ => {
