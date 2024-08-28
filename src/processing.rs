@@ -1,19 +1,21 @@
+use crate::datastructures::*;
+use crate::setup;
+use crate::Constants;
 
-use crate::datastructures::*; 
-use crate::Constants; 
-use crate::setup; 
-
-/// All the valid characters that will separate tokens. 
-/// 
+/// All the valid characters that will separate tokens.
+///
 /// The token lexemme is separated both righ before and right after the separator itself.
-/// It is already pre-sorted so binary search can be used on them. 
+/// It is already pre-sorted so binary search can be used on them.
 const SEPARATORS: [char; 14] = [
     ' ', '!', '%', '(', ')', '*', '+', '-', '/', '[', ']', '^', '{', '}',
-]; 
+];
 
-/// Converts the given string into a vector of [Token] with the given [InstanceDFA]. 
-/// 
-/// No further processing is done. 
+const DERIVE_KEYWORD_1: &'static str = "der";
+const DERIVE_KEYWORD_2: &'static str = "derive";
+
+/// Converts the given string into a vector of [Token] with the given [InstanceDFA].
+///
+/// No further processing is done.
 pub fn tokenize_input(idfas: &mut Vec<InstanceDFA>, input: &String) -> Vec<Token> {
     let mut chars = input.chars();
 
@@ -92,7 +94,7 @@ pub fn tokenize_input(idfas: &mut Vec<InstanceDFA>, input: &String) -> Vec<Token
 }
 
 ///If it finds a string that matches a known constant it will replace the [Token] identifier
-/// with a [Token] Number that contains the number. 
+/// with a [Token] Number that contains the number.
 pub fn constant_matcher(mut input: Vec<Token>) -> Vec<Token> {
     //Swaps the constants (such as "pi" or "e" to their numerical counterparts)
 
@@ -111,14 +113,14 @@ pub fn constant_matcher(mut input: Vec<Token>) -> Vec<Token> {
     return input;
 }
 
-/// Uses the shunting yard algorithm to put the tokens from infix 
-/// notation in postfix notation. 
-/// 
-/// Uses the shunting yard algorithm to put the vector of tokens from infix 
-/// notation (the normal one, such `"9+16*(5+2)"`) in postfix notation (also known as 
-/// reverse polish notation, `"9 16 5 2 + * +"`). Note how the reverse polish notation 
+/// Uses the shunting yard algorithm to put the tokens from infix
+/// notation in postfix notation.
+///
+/// Uses the shunting yard algorithm to put the vector of tokens from infix
+/// notation (the normal one, such `"9+16*(5+2)"`) in postfix notation (also known as
+/// reverse polish notation, `"9 16 5 2 + * +"`). Note how the reverse polish notation
 /// does not need parenthesis. This makes the following parsing much more managable.  
-/// Will return an error with a string in the case that the process fails. 
+/// Will return an error with a string in the case that the process fails.
 pub fn shunting_yard_algorithm(input: Vec<Token>) -> Result<Vec<Token>, String> {
     // Es: https://es.wikipedia.org/wiki/Algoritmo_shunting_yard
     // En: https://en.wikipedia.org/wiki/Shunting_yard_algorithm
@@ -305,13 +307,13 @@ pub fn shunting_yard_algorithm(input: Vec<Token>) -> Result<Vec<Token>, String> 
     return Ok(ret);
 }
 
-/// Substitutes the corresponding substraction [Token] `-` for negarion [Token] `--` 
-/// when needed. 
-/// 
-/// The substraction (as in "4-6") and the negation (as in "-(2+6)") share the 
-/// same symbol, but they operate in a very diferent way. The usual substraction 
-/// takes 2 inputs but negation only takes 1. To fix this, this function substitutes 
-/// the [Token] containing a "-" lexemme (string literal) for "--" (wich denotes negation). 
+/// Substitutes the corresponding substraction [Token] `-` for negarion [Token] `--`
+/// when needed.
+///
+/// The substraction (as in "4-6") and the negation (as in "-(2+6)") share the
+/// same symbol, but they operate in a very diferent way. The usual substraction
+/// takes 2 inputs but negation only takes 1. To fix this, this function substitutes
+/// the [Token] containing a "-" lexemme (string literal) for "--" (wich denotes negation).
 pub fn negation_substituter(input: Vec<Token>) -> Vec<Token> {
     /*There is a bug that causes functions in the form 1+f(-x) to give an error
     due to the double function of the - sing. To solve this, we will be substituting
@@ -385,16 +387,16 @@ pub fn negation_substituter(input: Vec<Token>) -> Vec<Token> {
     return ret;
 }
 
+/// Substitute the literal "x" by a [Token] with the variant [TokenClass::Variable].
 pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
-
-    let mut ret: Vec<Token> = Vec::with_capacity(input.len()); 
+    let mut ret: Vec<Token> = Vec::with_capacity(input.len());
     let variable_raw_model: TokenModel = TokenModel {
         token: Token {
             lexeme: Some(String::from("x")),
             class: TokenClass::Identifier,
         },
         compare_lexemme: true,
-    }; 
+    };
 
     let variable_model: TokenModel = TokenModel {
         token: Token {
@@ -402,22 +404,47 @@ pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
             class: TokenClass::Variable,
         },
         compare_lexemme: true,
-    }; 
+    };
 
     for tok in input {
         if variable_raw_model.cmp(&tok) {
-            ret.push(variable_model.get_token()); 
-            continue; 
+            ret.push(variable_model.get_token());
+            continue;
         }
-        ret.push(tok); 
+        ret.push(tok);
     }
 
-    return ret; 
-
+    return ret;
 }
 
-pub fn generate_ast(input: String, calc: &mut Calculator, print_messages: bool) -> Result<AST, String> {
+/// Detects the identifiers with ´"der"´ and changes the element variant
+/// to [Element::Derive].
+///
+pub fn derive_substituter(input: &mut AST) {
+    if let Element::Function(str) = &input.value {
+        match str.to_lowercase().as_str() {
+            DERIVE_KEYWORD_1 | DERIVE_KEYWORD_2 => {
+                input.value = Element::Derive;
+            }
+            _ => {}
+        }
+    }
 
+    // Apply recursively to the children.
+    input
+        .children
+        .iter_mut()
+        .for_each(|ch| derive_substituter(&mut ch.borrow_mut()));
+}
+
+/// Processes the given ´input´ string with the calculator and returns the [AST]
+/// with the exprssion it represents or a corresponding error.
+/// Set print_messages to true in order to print extra information.
+pub fn generate_ast(
+    input: String,
+    calc: &mut Calculator,
+    print_messages: bool,
+) -> Result<AST, String> {
     if print_messages {
         println!("");
     }
@@ -436,7 +463,7 @@ pub fn generate_ast(input: String, calc: &mut Calculator, print_messages: bool) 
 
     //constant substitution
     {
-        token_list = constant_matcher(token_list); 
+        token_list = constant_matcher(token_list);
     }
 
     // parenthesis correcness
@@ -446,7 +473,7 @@ pub fn generate_ast(input: String, calc: &mut Calculator, print_messages: bool) 
         }
 
         if print_messages {
-            println!("Checked correcness of use of parenthesis. ");
+            println!("Checked use of parenthesis. ");
         }
     }
 
@@ -475,7 +502,7 @@ pub fn generate_ast(input: String, calc: &mut Calculator, print_messages: bool) 
     token_list = negation_substituter(token_list);
 
     // variable detection
-    token_list = variable_substituter(token_list); 
+    token_list = variable_substituter(token_list);
 
     // transform to RPN:
     {
@@ -524,23 +551,26 @@ pub fn generate_ast(input: String, calc: &mut Calculator, print_messages: bool) 
     }
 
     if calc.parser.ast.len() != 1 {
-        return Err(String::from("AST has non-unit length. ")); 
+        return Err(String::from("AST has non-unit length. "));
     }
 
-    let ret: AST = calc.parser.ast.pop().unwrap(); 
+    let mut ret: AST = calc.parser.ast.pop().unwrap();
 
-    return Ok(ret); 
+    derive_substituter(&mut ret);
 
+    return Ok(ret);
 }
 
-
-/// evaluate_expression() is the function in charge to process all the information given the input. 
-/// 
-/// Set print_messages to true in order to print extra information. 
-/// Will return an error with a string if the process fails. 
-pub fn evaluate_expression(input: String, calc: &mut Calculator, print_messages: bool) -> Result<Number, String> {
-
-    let mut ast: AST = generate_ast(input, calc, print_messages)?; 
+/// evaluate_expression() is the function in charge to process all the information given the input.
+///
+/// Set print_messages to true in order to print extra information.
+/// Will return an error with a string if the process fails.
+pub fn evaluate_expression(
+    input: String,
+    calc: &mut Calculator,
+    print_messages: bool,
+) -> Result<Number, String> {
+    let mut ast: AST = generate_ast(input, calc, print_messages)?;
 
     let final_result: Number = ast.evaluate(None)?;
     if print_messages {

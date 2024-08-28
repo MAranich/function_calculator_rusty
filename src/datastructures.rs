@@ -1628,12 +1628,26 @@ impl AST {
     }
 
     /// Derives the contents of the given [AST].
+    ///
+    /// Calling this function on a [AST] means that it's parent has
+    /// a value of the variant [Element::Derive].
     pub fn derive(&self) -> Result<Self, String> {
         // Derivative rules: https://en.wikipedia.org/wiki/Differentiation_rules
 
+        if let Element::Derive = self.value {
+            //(f')' = f''
+
+            //derive it's children recursively.
+            let derivated_child: AST = self.children[0].borrow().derive()?;
+
+            // derive again for the parent of the given &self.
+            return derivated_child.derive();
+        }
+
         let ret: AST = match self.value {
             Element::Derive => {
-                todo!("No support for 2nd derivatives right now. To be implemented. ")
+                panic!("Impossible case. ");
+                // todo!("No support for 2nd derivatives right now. To be implemented. ")
             }
             //Element::Derive => self.children[0].borrow().derive(),
             Element::Function(_) => {
@@ -1882,10 +1896,7 @@ impl AST {
                     }
                     (false, false) => {
                         //just a constant. The derivative of a constant is 0.
-                        AST {
-                            value: Element::Number(Number::Rational(0, 1)),
-                            children: Vec::new(),
-                        }
+                        AST_ZERO.clone()
                     }
                 }
             }
@@ -1932,7 +1943,7 @@ impl Evaluable for AST {
         match &self.value {
             Element::Derive => {
                 return Err(String::from(
-                    "Cannor evaluate derivative. Derive first and then evaluate. ",
+                    "Cannot evaluate derivative. Derive first and then evaluate. ",
                 ))
             }
             Element::Function(name) => {

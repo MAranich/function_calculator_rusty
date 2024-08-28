@@ -1,5 +1,5 @@
 use std::{
-    cell::{Ref, RefCell},
+    cell::RefCell,
     f64::consts::{E, PI},
     rc::Rc,
 };
@@ -43,10 +43,9 @@ impl Functions {
     ///
     /// If it attemps to evaluate the function outside the bounds of the domain,
     /// it will retun the corresponding error. It will also return an error if
-    /// the function s not found.
+    /// the function s not found. The function name must be in lowercase and
+    /// match exacly with the corresponding name.
     pub fn find_and_evaluate(function_name: &str, mut input: Number) -> Result<Number, String> {
-        /*function name must be in lowercase and match exacly with the corresponding name.  */
-
         input.minimize();
 
         return match function_name {
@@ -111,7 +110,7 @@ impl Functions {
             FN_STR_COS => Ok(Number::new_real(input.get_numerical().cos())),
             FN_STR_TAN => {
                 let x: f64 = input.get_numerical();
-                if x / PI % 1.0 as f64 == 0.5 {
+                if (x / PI % 1.0 as f64 - 0.5).abs() < f64::EPSILON * 32.0 {
                     Err(String::from("The domain of tan(x) does not include values in the form x = PI*(1/2 + n), where n is an integer. "))
                 } else {
                     Ok(Number::new_real(x.tan()))

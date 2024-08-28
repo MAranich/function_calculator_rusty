@@ -138,9 +138,7 @@ fn main() {
         panic!("\nUse this command with an input. \ncargo run -- \"<your expression>\"");
     }
 
-    //input.remove(0);
     input = input.trim().to_string();
-    //input = space_adder(input);
     println!("\nProcessed input: {:#?}\n", input);
 
     let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
