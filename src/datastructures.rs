@@ -1033,7 +1033,7 @@ impl AST {
     /// 15.1)   (a/b) / (c/d) = a*d / (b*c)
     /// 15.2)   (a/b) / c = a / (b*c)
     /// 15.3)   a / (b/c) = a*c / b
-    /// 
+    ///
     ///
     /// Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
     /// 11)  x^a * x^b = x^(a+b)         (done in join_terms)
@@ -1529,7 +1529,7 @@ impl AST {
             .into_inner();
     }*/
 
-    /// Returns a human-readable stringified version of the [AST]. 
+    /// Returns a human-readable stringified version of the [AST].
     pub fn to_string(&self) -> String {
         return match &self.value {
             Element::Derive => format!("der({})", self.children[0].borrow().to_string()),
@@ -1992,6 +1992,84 @@ impl AST {
         };
 
         return Ok(ret);
+    }
+
+    /// Expants the derivated subtrees to it's corresponding derivated representation.
+    ///
+    /// If `recursively = true`, then this will be executed until no more derives
+    /// are left in the tree.
+    pub fn execute_derives(&self, recursively: bool) -> Result<Self, String> {
+        /* If there are multiple derives, we will only execute the ones
+        that do not contain any other derive. (`der(der(x^2) + der(4x))` => `der(2*x + 4)`).
+
+        If `recursively` = true. We will repeat this process until no more derives are found.
+
+        We are interested in the nodes of the [AST] that do not contain any other Element::Derive
+        among it's descendants.
+
+        */
+
+        let root: Rc<RefCell<AST>> = Rc::new(RefCell::new(self.deep_copy()));
+
+        loop {
+            let mut pending: Vec<Rc<RefCell<AST>>> = AST::get_derive_descendants(Rc::clone(&root));
+            // elements that do not have any other derive in its descendants.
+            let mut done: Vec<Rc<RefCell<AST>>> = Vec::new();
+            let mut abandoned_derives: bool = false;
+
+            while let Some(node) = pending.pop() {
+                let mut derive_descendants: Vec<Rc<RefCell<AST>>> =
+                    AST::get_derive_descendants(Rc::clone(&node));
+                if derive_descendants.is_empty() {
+                    done.push(node);
+                } else {
+                    pending.append(&mut derive_descendants);
+                    abandoned_derives = true;
+                }
+            }
+
+            while let Some(node) = done.pop() {
+                let derivative: AST = node.borrow().derive()?;
+
+                //set node = to the corresponding derivative.
+                node.borrow_mut().children.clear();
+                node.borrow_mut().children = derivative.children;
+                node.borrow_mut().value = derivative.value;
+            }
+
+            if !recursively || abandoned_derives {
+                break;
+            }
+        }
+
+        let ret: AST = Rc::try_unwrap(root)
+            .expect("Failed to unwrap Rc pointer in execute_derives. ")
+            .into_inner();
+
+        if false {
+            println!("{}\n", ret.to_string());
+        }
+
+        Ok(ret)
+    }
+
+    fn get_derive_descendants(input: Rc<RefCell<Self>>) -> Vec<Rc<RefCell<Self>>> {
+        // reutrns a vec of the descendants that are Element::Derive
+
+        if input.borrow().value == Element::Derive {
+            return vec![input];
+        }
+
+        input
+            .borrow()
+            .children
+            .iter()
+            .map(|child| AST::get_derive_descendants(Rc::clone(child)))
+            .reduce(|mut a, mut b| {
+                a.append(&mut b);
+                a
+            })
+            .unwrap_or(Vec::new())
     }
 }
 
