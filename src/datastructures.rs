@@ -1996,13 +1996,13 @@ impl AST {
 
     /// Expants the derivated subtrees to it's corresponding derivated representation.
     ///
-    /// If `recursively = true`, then this will be executed until no more derives
+    /// If `one_step = false`, then this will be executed until no more derives
     /// are left in the tree.
-    pub fn execute_derives(&self, recursively: bool) -> Result<Self, String> {
+    pub fn execute_derives(&self, one_step: bool) -> Result<Self, String> {
         /* If there are multiple derives, we will only execute the ones
         that do not contain any other derive. (`der(der(x^2) + der(4x))` => `der(2*x + 4)`).
 
-        If `recursively` = true. We will repeat this process until no more derives are found.
+        If `one_step` = false. We will repeat this process until no more derives are found.
 
         We are interested in the nodes of the [AST] that do not contain any other Element::Derive
         among it's descendants.
@@ -2037,7 +2037,7 @@ impl AST {
                 node.borrow_mut().value = derivative.value;
             }
 
-            if !recursively || abandoned_derives {
+            if one_step || abandoned_derives {
                 break;
             }
         }
