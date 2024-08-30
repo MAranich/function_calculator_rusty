@@ -1774,13 +1774,13 @@ impl AST {
                         // ln(f)
                         let ln_f: AST = AST {
                             value: Element::Function(String::from("ln")),
-                            children: vec![self.children[0].clone()],
+                            children: vec![Rc::new(RefCell::new(self.children[0].borrow().deep_copy()))],
                         };
 
                         // g/f
                         let g_over_f: AST = AST {
                             value: Element::Div,
-                            children: vec![self.children[1].clone(), self.children[0].clone()],
+                            children: vec![Rc::new(RefCell::new(self.children[1].borrow().deep_copy())), Rc::new(RefCell::new(self.children[0].borrow().deep_copy()))],
                         };
 
                         // f' * g/f
@@ -1835,7 +1835,7 @@ impl AST {
                         let power: AST = AST {
                             value: Element::Exp,
                             children: vec![
-                                self.children[0].clone(),
+                                Rc::new(RefCell::new(self.children[0].borrow().deep_copy())),
                                 Rc::new(RefCell::new(AST {
                                     value: Element::Number(exp_minus_1),
                                     children: Vec::new(),
@@ -1889,7 +1889,7 @@ impl AST {
                         AST {
                             value: Element::Mult,
                             children: vec![
-                                Rc::new(RefCell::new(self.clone())),
+                                Rc::new(RefCell::new(self.deep_copy())),
                                 Rc::new(RefCell::new(der_ln_a)),
                             ],
                         }
