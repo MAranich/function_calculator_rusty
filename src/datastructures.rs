@@ -1016,48 +1016,38 @@ impl AST {
         return Ok(ret);
     }
 
-    /// Simplifies the ast using some basic mathematical identities
+    /// Simplifies the ast using some basic mathematical identities:
     ///
-    /// 1)   x +- 0 = x
-    /// 2)   x * 0 = 0
-    /// 3)   x * 1 = x
-    /// 4)   0/x = 0
-    /// 5)   x/1 = x
-    /// 6)   x/x = 1
-    /// 7)   x ^ 1 = x
-    /// 8)   x ^ 0 = 1
-    /// 10)  1 ^ x = 1
-    /// 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
-    /// 13)  x + a + x = 2*x + a
-    /// 14)  -(-x) = x
-    /// Unimplemented: 15) (a/b) / (c/d) = a*d / (b*c)
+    /// 1)      x +- 0 = x
+    /// 2)      x * 0 = 0
+    /// 3)      x * 1 = x
+    /// 4)      0/x = 0
+    /// 5)      x/1 = x
+    /// 6)      x/x = 1
+    /// 7)      x ^ 1 = x
+    /// 8)      x ^ 0 = 1
+    /// 10)     1 ^ x = 1
+    /// 12)     sqrt(x^(2*a)) = |x|^a    // a is whole
+    /// 13)     x + a + x = 2*x + a
+    /// 14)     -(-x) = x
+    /// 15.1)   (a/b) / (c/d) = a*d / (b*c)
+    /// 15.2)   (a/b) / c = a / (b*c)
+    /// 15.3)   a / (b/c) = a*c / b
+    /// 
     ///
     /// Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
     /// 11)  x^a * x^b = x^(a+b)         (done in join_terms)
     ///
+    /// Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression].
     fn simplify_arithmetical(self) -> Result<Self, String> {
-        // Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression]
-
-        // 1)   x +- 0 = x
-        // 2)   x * 0 = 0
-        // 3)   x * 1 = x
-        // 4)   0/x = 0
-        // 5)   x/1 = x
-        // 6)   x/x = 1
-        // 7)   x ^ 1 = x
-        // 8)   x ^ 0 = 1
-        // 10)  1 ^ x = 1
-        // 12)  sqrt(x^(2*a)) = |x|^a    // a is whole
-        // 13)  x + a + x = 2*x + a
-        // 14)  -(-x) = x
-        //
-        // Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
-        // 11)  x^a * x^b = x^(a+b)         (done in join_terms)
-
+        // Debugging tools:
+        let PRINT_DGB_STATEMENTS: bool = false;
         let mut rnd: rand::prelude::ThreadRng = rand::thread_rng();
         let call_id: f64 = rnd.gen::<f64>();
 
-        println!("In [{:.4}]: {:?}", call_id, self.to_string());
+        if PRINT_DGB_STATEMENTS {
+            println!("In [{:.4}]: {:?}", call_id, self.to_string());
+        }
 
         let mut ret: AST = match self.value {
             Element::Function(_) => self,
@@ -1208,7 +1198,67 @@ impl AST {
                     break 'div AST_ONE.clone(); // no deep_clone because it has no children
                 }
 
-                self
+                // 15) (a/b) / (c/d) = a*d / (b*c)  (+variants with only 1 nested division)
+                let division_in_numerator: bool = self.children[0].borrow().value == Element::Div;
+                let division_in_denominator: bool = self.children[1].borrow().value == Element::Div;
+
+                match (division_in_numerator, division_in_denominator) {
+                    // 15.1) (a/b) / (c/d) = a*d / (b*c)
+                    (true, true) => {
+                        let a: Rc<RefCell<AST>> = Rc::clone(&self.children[0].borrow().children[0]);
+                        let b: Rc<RefCell<AST>> = Rc::clone(&self.children[0].borrow().children[1]);
+                        let c: Rc<RefCell<AST>> = Rc::clone(&self.children[1].borrow().children[0]);
+                        let d: Rc<RefCell<AST>> = Rc::clone(&self.children[1].borrow().children[1]);
+
+                        let num: AST = AST {
+                            value: Element::Mult,
+                            children: vec![a, d],
+                        };
+
+                        let den: AST = AST {
+                            value: Element::Mult,
+                            children: vec![b, c],
+                        };
+
+                        AST {
+                            value: Element::Div,
+                            children: vec![Rc::new(RefCell::new(num)), Rc::new(RefCell::new(den))],
+                        }
+                    }
+                    // 15.2) (a/b) / c = a / (b*c)
+                    (true, false) => {
+                        let a: Rc<RefCell<AST>> = Rc::clone(&self.children[0].borrow().children[0]);
+                        let b: Rc<RefCell<AST>> = Rc::clone(&self.children[0].borrow().children[1]);
+                        let c: Rc<RefCell<AST>> = Rc::clone(&self.children[1]);
+
+                        let den: AST = AST {
+                            value: Element::Mult,
+                            children: vec![b, c],
+                        };
+
+                        AST {
+                            value: Element::Div,
+                            children: vec![a, Rc::new(RefCell::new(den))],
+                        }
+                    }
+                    // 15.3) a / (b/c) = a*c / b
+                    (false, true) => {
+                        let a: Rc<RefCell<AST>> = Rc::clone(&self.children[0]);
+                        let b: Rc<RefCell<AST>> = Rc::clone(&self.children[1].borrow().children[0]);
+                        let c: Rc<RefCell<AST>> = Rc::clone(&self.children[1].borrow().children[1]);
+
+                        let num: AST = AST {
+                            value: Element::Mult,
+                            children: vec![a, c],
+                        };
+
+                        AST {
+                            value: Element::Div,
+                            children: vec![Rc::new(RefCell::new(num)), b],
+                        }
+                    }
+                    (false, false) => self,
+                }
             }
             Element::Exp => 'exp: {
                 // 7)   x ^ 1 = x
@@ -1265,7 +1315,9 @@ impl AST {
             .map(|updated| Rc::new(RefCell::new(updated)))
             .collect();
 
-        println!("Out [{:.4}]: {:?}\n", call_id, ret.to_string());
+        if PRINT_DGB_STATEMENTS {
+            println!("Out [{:.4}]: {:?}\n", call_id, ret.to_string());
+        }
 
         return Ok(ret);
     }
@@ -1477,6 +1529,7 @@ impl AST {
             .into_inner();
     }*/
 
+    /// Returns a human-readable stringified version of the [AST]. 
     pub fn to_string(&self) -> String {
         return match &self.value {
             Element::Derive => format!("der({})", self.children[0].borrow().to_string()),
@@ -1774,13 +1827,18 @@ impl AST {
                         // ln(f)
                         let ln_f: AST = AST {
                             value: Element::Function(String::from("ln")),
-                            children: vec![Rc::new(RefCell::new(self.children[0].borrow().deep_copy()))],
+                            children: vec![Rc::new(RefCell::new(
+                                self.children[0].borrow().deep_copy(),
+                            ))],
                         };
 
                         // g/f
                         let g_over_f: AST = AST {
                             value: Element::Div,
-                            children: vec![Rc::new(RefCell::new(self.children[1].borrow().deep_copy())), Rc::new(RefCell::new(self.children[0].borrow().deep_copy()))],
+                            children: vec![
+                                Rc::new(RefCell::new(self.children[1].borrow().deep_copy())),
+                                Rc::new(RefCell::new(self.children[0].borrow().deep_copy())),
+                            ],
                         };
 
                         // f' * g/f

@@ -97,7 +97,9 @@
 //! Physical constants have [IS units](https://en.wikipedia.org/wiki/International_System_of_Units).
 //!
 
+use std::cell::RefCell;
 use std::env;
+use std::rc::Rc;
 
 //#[allow(unused_parens)]
 
@@ -150,34 +152,35 @@ fn main() {
 
     println!("\n\tThe generated AST: \n\n{:#?}\n", ast.to_string());
 
-    let derivated: AST = match ast.derive() {
-        Ok(der) => {
-            println!("Unsimplified derivated AST: \n{}", der.to_string());
+    let WANT_TO_DERIVE: bool = false; 
+    if WANT_TO_DERIVE {
 
-            match der.simplify_expression() {
-                Ok(der_simp) => der_simp,
-                Err(e) => panic!("\nError while simplifying the derivated input: {}\n", e),
+        let derivated: AST = match ast.derive() {
+            Ok(der) => {
+                println!("Unsimplified derivated AST: \n{}", der.to_string());
+    
+                match der.simplify_expression() {
+                    Ok(der_simp) => der_simp,
+                    Err(e) => panic!("\nError while simplifying the derivated input: {}\n", e),
+                }
             }
-        }
-        Err(e) => panic!("\nError while derivating input: {}\n", e),
-    };
+            Err(e) => panic!("\nError while derivating input: {}\n", e),
+        };
+    
+        println!(
+            "\n\tThe derivation of the AST: \n\n{:#?}\n",
+            derivated.to_string()
+        );
+    } else {
 
-    println!(
-        "\n\tThe derivation of the AST: \n\n{:#?}\n",
-        derivated.to_string()
-    );
-
-    /*
-
-    println!("The AST contains variables: {}\n", ast.contains_variable());
-
-    let ast_ref: Rc<RefCell<AST>> = Rc::new(RefCell::new(ast));
-    match AST::simplify_expression(Rc::clone(&ast_ref)) {
-        Ok(_) => {},
-        Err(msg) => panic!("\n{}", msg),
+        println!("Does the AST contain variables?: {}\n", ast.contains_variable());
+    
+        let simp_ast: AST = match AST::simplify_expression(ast) {
+            Ok(x) => x,
+            Err(msg) => panic!("\n{}", msg),
+        }; 
+    
+        println!("Simplified AST stringified: \n\n\t{}\n\n", simp_ast.to_string());
     }
 
-    println!("Simplified AST stringified: \n\n\t{}\n\n", ast_ref.borrow().to_string());
-
-    */
 }
