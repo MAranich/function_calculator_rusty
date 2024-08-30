@@ -1682,7 +1682,7 @@ impl AST {
                     value: Element::Mult,
                     children: vec![
                         Rc::new(RefCell::new(der_0)),
-                        self.children.get(0).unwrap().clone(),
+                        Rc::new(RefCell::new(self.children[1].borrow().deep_copy())),
                     ],
                 };
 
@@ -1691,7 +1691,7 @@ impl AST {
                     value: Element::Mult,
                     children: vec![
                         Rc::new(RefCell::new(der_1)),
-                        self.children.get(1).unwrap().clone(),
+                        Rc::new(RefCell::new(self.children[0].borrow().deep_copy())),
                     ],
                 };
 
@@ -1715,7 +1715,7 @@ impl AST {
                     value: Element::Mult,
                     children: vec![
                         Rc::new(RefCell::new(der_0)),
-                        self.children.get(0).unwrap().clone(),
+                        Rc::new(RefCell::new(self.children[1].borrow().deep_copy())),
                     ],
                 };
 
@@ -1724,11 +1724,11 @@ impl AST {
                     value: Element::Mult,
                     children: vec![
                         Rc::new(RefCell::new(der_1)),
-                        self.children.get(1).unwrap().clone(),
+                        Rc::new(RefCell::new(self.children[0].borrow().deep_copy())),
                     ],
                 };
 
-                // f'*g + g'*f
+                // f'*g - g'*f
                 let numerator: AST = AST {
                     value: Element::Sub,
                     children: vec![Rc::new(RefCell::new(prod_0)), Rc::new(RefCell::new(prod_1))],
