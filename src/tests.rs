@@ -3,7 +3,7 @@ use rayon::prelude::*;
 
 use crate::*;
 use core::panic;
-use std::time::Instant;
+use std::{cell::RefCell, rc::Rc, time::Instant};
 
 #[test]
 fn stringify_ast_test() {
@@ -638,4 +638,116 @@ fn test_ilogs() {
     println!("Condition: {}", proof);
 
     assert!(proof);
+}
+
+#[test]
+fn derive_test() {
+    // x + 3
+    let tree1: AST = {
+        AST {
+            value: Element::Add,
+            children: vec![
+                Rc::new(RefCell::new(AST {
+                    value: Element::Var,
+                    children: Vec::new(),
+                })),
+                Rc::new(RefCell::new(AST::from_number(Number::Rational(3, 1)))),
+            ],
+        }
+    }
+    .insert_derive();
+
+    //x^2 * 3
+    let tree2: AST = {
+        let x: AST = AST {
+            value: Element::Var,
+            children: Vec::new(),
+        };
+
+        let x_sq: AST = AST {
+            value: Element::Exp,
+            children: vec![
+                get_ptr(x),
+                get_ptr(AST::from_number(Number::Rational(2, 1))),
+            ],
+        };
+
+        AST {
+            value: Element::Mult,
+            children: vec![
+                get_ptr(x_sq),
+                get_ptr(AST::from_number(Number::Rational(3, 1))),
+            ],
+        }
+    }
+    .insert_derive();
+
+    //x*arccos(x)^10
+    let tree3: AST = {
+        let arccos: AST = AST {
+            value: Element::Function(String::from("arccos")),
+            children: vec![get_ptr(AST_VAR.clone())],
+        };
+
+        let arccos_10: AST = AST {
+            value: Element::Exp,
+            children: vec![
+                get_ptr(arccos),
+                get_ptr(AST::from_number(Number::Rational(10, 1))),
+            ],
+        };
+
+        AST {
+            value: Element::Mult,
+            children: vec![get_ptr(AST_VAR.clone()), get_ptr(arccos_10)],
+        }
+    }
+    .insert_derive();
+
+    // tree, evaluation point, result
+    let tree_list: Vec<(AST, Number, Number)> = vec![
+        (tree1, Number::Rational(1, 1), Number::Rational(1, 1)),
+        (tree2, Number::Rational(1, 1), Number::Rational(6, 1)),
+        (tree3, Number::Rational(1, 2), Number::Real(-2.785929065537081)),
+    ];
+
+    for (ast, eval_point, solution) in tree_list {
+        let (der, _): (AST, bool) = match ast.execute_derives(false) {
+            Ok(v) => v,
+            Err(e) => panic!(
+                "{} ||| {} ({:?}) = {:?}",
+                e,
+                ast.to_string(),
+                eval_point,
+                solution
+            ),
+        };
+
+        println!("AST: {}\n", ast.to_string());
+        println!("Der AST: {}\n", der.to_string());
+
+        let awnser: Number = match der.evaluate(Some(eval_point.clone())) {
+            Ok(v) => v,
+            Err(e) => panic!(
+                "Error: {} ||| {} ({:?}) = {:?}",
+                e,
+                der.to_string(),
+                eval_point,
+                solution
+            ),
+        };
+
+        
+        if !awnser.in_tolerance_range(&solution, 0.0000001) {
+            panic!(
+                "Non-equal results. Got {:?} ||| {} ({:?}) = {:?}",
+                awnser, 
+                der.to_string(),
+                eval_point,
+                solution
+            );
+        }
+    }
+
+    //panic!();
 }

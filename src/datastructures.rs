@@ -1,5 +1,4 @@
 use core::fmt;
-use integer_sqrt::IntegerSquareRoot;
 use rand::Rng;
 use std::{cell::RefCell, iter::zip, ops, rc::Rc, vec};
 
@@ -195,17 +194,23 @@ pub struct Calculator {
 ///
 /// It returns a Number or a String containing an explanation of the error.
 pub trait Evaluable {
-    fn evaluate(&mut self, x: Option<Number>) -> Result<Number, String>;
+    fn evaluate(&self, x: Option<Number>) -> Result<Number, String>;
 }
 
 /// An [AST] that contains the number 0.
-const AST_ZERO: AST = AST {
+pub const AST_ZERO: AST = AST {
     value: Element::Number(Number::Rational(0, 1)),
     children: Vec::new(),
 };
 /// An [AST] that contains the number 1.
-const AST_ONE: AST = AST {
+pub const AST_ONE: AST = AST {
     value: Element::Number(Number::Rational(1, 1)),
+    children: Vec::new(),
+};
+
+/// An [AST] that contains the variable.
+pub const AST_VAR: AST = AST {
+    value: Element::Var,
     children: Vec::new(),
 };
 
@@ -1041,6 +1046,7 @@ impl AST {
     /// Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression].
     fn simplify_arithmetical(self) -> Result<Self, String> {
         // Debugging tools:
+        #[allow(non_snake_case)]
         let PRINT_DGB_STATEMENTS: bool = false;
         let mut rnd: rand::prelude::ThreadRng = rand::thread_rng();
         let call_id: f64 = rnd.gen::<f64>();
@@ -1451,6 +1457,7 @@ impl AST {
     /// If the given node is a substraction it changes it to the addition of a negated value
     ///
     /// otherwise does nothing
+    #[allow(dead_code)]
     fn sub_to_neg(&mut self) {
         if self.value != Element::Neg {
             return;
@@ -1680,6 +1687,69 @@ impl AST {
         };
     }
 
+    /// Inserts a derive block and moves everything else
+    ///
+    /// (including self to the child of the new [Element::Derive]).
+    /// Just created for convenience.
+    ///
+    /// Parent of self -> Self
+    /// Parent of self -> Derive -> Self
+    pub fn insert_derive(mut self) -> Self {
+        let sub_tree: AST = AST {
+            value: self.value.clone(),
+            children: self.children,
+        };
+
+        self.value = Element::Derive;
+        self.children = vec![Rc::new(RefCell::new(sub_tree))];
+
+        self
+    }
+
+    /// Inserts a derive block and moves everything else
+    ///
+    /// (including self to the child of the new [Element::Derive]).
+    /// Just created for convenience. Same as [AST::insert_derive]
+    /// but with diferent signature.
+    ///
+    /// Parent of self -> Self
+    /// Parent of self -> Derive -> Self
+    fn insert_derive_new(&self) -> Self {
+        let mut input: AST = self.deep_copy();
+
+        let sub_tree: AST = AST {
+            value: input.value,
+            children: input.children,
+        };
+
+        input.value = Element::Derive;
+        input.children = vec![Rc::new(RefCell::new(sub_tree))];
+
+        input
+    }
+
+    /// Inserts a derive block and moves everything else
+    ///
+    /// (including self to the child of the new [Element::Derive]).
+    /// Just created for convenience. Same as [AST::insert_derive]
+    /// but with diferent signature.
+    ///
+    /// Parent of self -> Self
+    /// Parent of self -> Derive -> Self
+    #[allow(dead_code)]
+    fn insert_derive_ref(&mut self) {
+        let childs: vec::Drain<'_, Rc<RefCell<AST>>> = self.children.drain(0..);
+        let elem: Element = self.value.clone();
+
+        let sub_tree: AST = AST {
+            value: elem,
+            children: childs.collect(),
+        };
+
+        self.value = Element::Derive;
+        self.children = vec![Rc::new(RefCell::new(sub_tree))];
+    }
+
     /// Derives the contents of the given [AST].
     ///
     /// Calling this function on a [AST] means that it's parent has
@@ -1690,11 +1760,14 @@ impl AST {
         if let Element::Derive = self.value {
             //(f')' = f''
 
+            /*
             //derive it's children recursively.
             let derivated_child: AST = self.children[0].borrow().derive()?;
 
             // derive again for the parent of the given &self.
             return derivated_child.derive();
+            */
+            return Ok(self.insert_derive_new());
         }
 
         let ret: AST = match self.value {
@@ -1710,15 +1783,15 @@ impl AST {
             Element::Add => AST {
                 value: Element::Add,
                 children: vec![
-                    Rc::new(RefCell::new(self.children[0].borrow().derive()?)),
-                    Rc::new(RefCell::new(self.children[1].borrow().derive()?)),
+                    Rc::new(RefCell::new(self.children[0].borrow().insert_derive_new())),
+                    Rc::new(RefCell::new(self.children[1].borrow().insert_derive_new())),
                 ],
             },
             Element::Sub => AST {
                 value: Element::Sub,
                 children: vec![
-                    Rc::new(RefCell::new(self.children[0].borrow().derive()?)),
-                    Rc::new(RefCell::new(self.children[1].borrow().derive()?)),
+                    Rc::new(RefCell::new(self.children[0].borrow().insert_derive_new())),
+                    Rc::new(RefCell::new(self.children[1].borrow().insert_derive_new())),
                 ],
             },
             Element::Mult => {
@@ -1726,9 +1799,9 @@ impl AST {
                 // assume only 2 multiplied elements, otherwise invalid AST
 
                 // f'
-                let der_0: AST = self.children[0].borrow().derive()?;
+                let der_0: AST = self.children[0].borrow().insert_derive_new();
                 // g'
-                let der_1: AST = self.children[1].borrow().derive()?;
+                let der_1: AST = self.children[1].borrow().insert_derive_new();
 
                 // f'*g
                 let prod_0: AST = AST {
@@ -1758,10 +1831,10 @@ impl AST {
                 // (f/g)' = (f'*g - g'*f)/g^2
 
                 // f'
-                let der_0: AST = self.children[0].borrow().derive()?;
+                let der_0: AST = self.children[0].borrow().insert_derive_new();
 
                 // g'
-                let der_1: AST = self.children[1].borrow().derive()?;
+                let der_1: AST = self.children[1].borrow().insert_derive_new();
 
                 // f'*g
                 let prod_0: AST = AST {
@@ -1820,9 +1893,9 @@ impl AST {
                         // oh, boy...
 
                         // f'
-                        let der_0: AST = self.children[0].borrow().derive()?;
+                        let der_0: AST = self.children[0].borrow().insert_derive_new();
                         // g'
-                        let der_1: AST = self.children[1].borrow().derive()?;
+                        let der_1: AST = self.children[1].borrow().insert_derive_new();
 
                         // ln(f)
                         let ln_f: AST = AST {
@@ -1881,7 +1954,7 @@ impl AST {
                         // f^a => a*f^(a-1) * f'
 
                         //f'
-                        let der: AST = self.children[0].borrow().derive()?;
+                        let der: AST = self.children[0].borrow().insert_derive_new();
 
                         // a
                         let exp: Number = self.children[1].borrow_mut().evaluate(None)?;
@@ -1926,7 +1999,7 @@ impl AST {
                         //a^f => a^f * ln(a)*f'
 
                         //f'
-                        let der: AST = self.children[1].borrow().derive()?;
+                        let der: AST = self.children[1].borrow().insert_derive_new();
 
                         let mut ln_a_numerical: Number =
                             self.children[0].borrow_mut().evaluate(None)?;
@@ -1975,7 +2048,7 @@ impl AST {
                 children: Vec::new(),
             },
             Element::Neg => {
-                let der: AST = self.children[0].borrow().derive()?;
+                let der: AST = self.children[0].borrow().insert_derive_new();
 
                 AST {
                     value: Element::Mult,
@@ -1996,9 +2069,14 @@ impl AST {
 
     /// Expants the derivated subtrees to it's corresponding derivated representation.
     ///
+    /// If there are no derives it just returns a deep clone of self and flag = false.
+    ///
     /// If `one_step = false`, then this will be executed until no more derives
     /// are left in the tree.
-    pub fn execute_derives(&self, one_step: bool) -> Result<Self, String> {
+    ///
+    /// If successfull, the flag determines if there is any other [Element::Derive]
+    /// left in the tree.
+    pub fn execute_derives(&self, one_step: bool) -> Result<(Self, bool), String> {
         /* If there are multiple derives, we will only execute the ones
         that do not contain any other derive. (`der(der(x^2) + der(4x))` => `der(2*x + 4)`).
 
@@ -2011,15 +2089,25 @@ impl AST {
 
         let root: Rc<RefCell<AST>> = Rc::new(RefCell::new(self.deep_copy()));
 
-        loop {
+        let derives_left: bool = loop {
             let mut pending: Vec<Rc<RefCell<AST>>> = AST::get_derive_descendants(Rc::clone(&root));
             // elements that do not have any other derive in its descendants.
             let mut done: Vec<Rc<RefCell<AST>>> = Vec::new();
             let mut abandoned_derives: bool = false;
 
             while let Some(node) = pending.pop() {
-                let mut derive_descendants: Vec<Rc<RefCell<AST>>> =
-                    AST::get_derive_descendants(Rc::clone(&node));
+                //let mut derive_descendants: Vec<Rc<RefCell<AST>>> = AST::get_derive_descendants(Rc::clone(&node));
+                let mut derive_descendants: Vec<Rc<RefCell<AST>>> = node
+                    .borrow()
+                    .children
+                    .iter()
+                    .map(|children| AST::get_derive_descendants(Rc::clone(&children)))
+                    .reduce(|mut a, mut b| {
+                        a.append(&mut b);
+                        a
+                    })
+                    .unwrap_or(Vec::new());
+
                 if derive_descendants.is_empty() {
                     done.push(node);
                 } else {
@@ -2028,19 +2116,28 @@ impl AST {
                 }
             }
 
-            while let Some(node) = done.pop() {
-                let derivative: AST = node.borrow().derive()?;
+            let mut added_derives: bool = false;
+
+            for node in done {
+                // get the child and derive it.
+                let derivative: AST = match node.borrow().children.get(0) {
+                    Some(v) => v.borrow().derive()?,
+                    None => return Err(String::from("Expected child after Element::Derive. \n")),
+                };
 
                 //set node = to the corresponding derivative.
                 node.borrow_mut().children.clear();
                 node.borrow_mut().children = derivative.children;
                 node.borrow_mut().value = derivative.value;
+
+                added_derives = added_derives || node.borrow().is_derive_descendants();
             }
 
-            if one_step || abandoned_derives {
-                break;
+            // if we just asked for 1 step or we don't have any derives left, exit
+            if one_step || !(abandoned_derives || added_derives) {
+                break abandoned_derives || added_derives;
             }
-        }
+        };
 
         let ret: AST = Rc::try_unwrap(root)
             .expect("Failed to unwrap Rc pointer in execute_derives. ")
@@ -2050,12 +2147,11 @@ impl AST {
             println!("{}\n", ret.to_string());
         }
 
-        Ok(ret)
+        Ok((ret, derives_left))
     }
 
+    /// reutrns a vec of the descendants (ir input) that are [Element::Derive]
     fn get_derive_descendants(input: Rc<RefCell<Self>>) -> Vec<Rc<RefCell<Self>>> {
-        // reutrns a vec of the descendants that are Element::Derive
-
         if input.borrow().value == Element::Derive {
             return vec![input];
         }
@@ -2071,11 +2167,52 @@ impl AST {
             })
             .unwrap_or(Vec::new())
     }
+
+    /// Returns true if self or any descendant are of the variant [Element::Derive].
+    fn is_derive_descendants(&self) -> bool {
+        if self.value == Element::Derive {
+            return true;
+        }
+
+        for child in &self.children {
+            if child.borrow().is_derive_descendants() {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    pub fn full_derive(&self, print_procedure: bool) -> Result<Self, String> {
+        // fully derive any current derivation in the tree
+
+        let (new, mut flag): (AST, bool) = self.execute_derives(false)?;
+        assert!(flag == false); // No more missing derives since one_step = true
+        if print_procedure {
+            println!("AST without derivatives {}\n", self.to_string());
+        }
+
+        // Add a derive and expand
+
+        let mut derivated: AST = new.insert_derive();
+
+        if print_procedure {
+            println!("With derivative: {}\n", self.to_string());
+        }
+
+        (derivated, flag) = derivated.execute_derives(true)?;
+        assert!(flag == false); // No more missing derives since one_step = true
+        if print_procedure {
+            println!("Completely derives: {}\n", self.to_string());
+        }
+
+        Ok(derivated)
+    }
 }
 
 impl Evaluable for AST {
     /// Evaluates the [AST] recursively.
-    fn evaluate(&mut self, var_value: Option<Number>) -> Result<Number, String> {
+    fn evaluate(&self, var_value: Option<Number>) -> Result<Number, String> {
         match &self.value {
             Element::Derive => {
                 return Err(String::from(
@@ -2851,7 +2988,7 @@ impl fmt::Debug for Number {
 
 impl Evaluable for Number {
     /// Returns the [Number] itself.
-    fn evaluate(&mut self, _var_value: Option<Number>) -> Result<Number, String> {
+    fn evaluate(&self, _var_value: Option<Number>) -> Result<Number, String> {
         return Ok(self.clone());
     }
 }

@@ -97,9 +97,7 @@
 //! Physical constants have [IS units](https://en.wikipedia.org/wiki/International_System_of_Units).
 //!
 
-use std::cell::RefCell;
 use std::env;
-use std::rc::Rc;
 
 //#[allow(unused_parens)]
 
@@ -152,10 +150,14 @@ fn main() {
 
     println!("\n\tThe generated AST: \n\n{:#?}\n", ast.to_string());
 
-    let WANT_TO_DERIVE: bool = false; 
+    #[allow(non_snake_case)]
+    let WANT_TO_DERIVE: bool = true; 
+    #[allow(non_snake_case)]
+    let VERBOSE: bool = true; 
+
     if WANT_TO_DERIVE {
 
-        let derivated: AST = match ast.derive() {
+        let derivated: AST = match ast.full_derive(VERBOSE) {
             Ok(der) => {
                 println!("Unsimplified derivated AST: \n{}", der.to_string());
     

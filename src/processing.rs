@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use crate::datastructures::*;
 use crate::setup;
 use crate::Constants;
@@ -12,6 +15,10 @@ const SEPARATORS: [char; 14] = [
 
 const DERIVE_KEYWORD_1: &'static str = "der";
 const DERIVE_KEYWORD_2: &'static str = "derive";
+
+pub fn get_ptr<T>(x: T) -> Rc<RefCell<T>>{
+    Rc::new(RefCell::new(x))
+}
 
 /// Converts the given string into a vector of [Token] with the given [InstanceDFA].
 ///
@@ -570,7 +577,7 @@ pub fn evaluate_expression(
     calc: &mut Calculator,
     print_messages: bool,
 ) -> Result<Number, String> {
-    let mut ast: AST = generate_ast(input, calc, print_messages)?;
+    let ast: AST = generate_ast(input, calc, print_messages)?;
 
     let final_result: Number = ast.evaluate(None)?;
     if print_messages {
