@@ -151,38 +151,69 @@ fn main() {
     println!("\n\tThe generated AST: \n\n{:#?}\n", ast.to_string());
 
     #[allow(non_snake_case)]
-    let WANT_TO_DERIVE: bool = true; 
+    let WANT_TO_DERIVE: bool = false;
     #[allow(non_snake_case)]
-    let VERBOSE: bool = true; 
+    let VERBOSE: bool = true;
 
     if WANT_TO_DERIVE {
-
         let derivated: AST = match ast.full_derive(VERBOSE) {
             Ok(der) => {
                 println!("Unsimplified derivated AST: \n{}", der.to_string());
-    
-                match der.simplify_expression() {
+
+                match der.partial_evaluation() {
                     Ok(der_simp) => der_simp,
                     Err(e) => panic!("\nError while simplifying the derivated input: {}\n", e),
                 }
             }
             Err(e) => panic!("\nError while derivating input: {}\n", e),
         };
-    
+
         println!(
             "\n\tThe derivation of the AST: \n\n{:#?}\n",
             derivated.to_string()
         );
     } else {
+        println!(
+            "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
+            ast.contains_variable(),
+            ast.contains_derives()
+        );
 
-        println!("Does the AST contain variables?: {}\n", ast.contains_variable());
-    
-        let simp_ast: AST = match AST::simplify_expression(ast) {
-            Ok(x) => x,
+        let expanded_ders: AST = match ast.execute_derives(false, true) {
+            Ok((v, f)) => {
+                assert!(f == false);
+                v
+            }
             Err(msg) => panic!("\n{}", msg),
-        }; 
-    
-        println!("Simplified AST stringified: \n\n\t{}\n\n", simp_ast.to_string());
-    }
+        };
 
+
+        println!("AST stringified: \n\n\t{}\n\n", expanded_ders.to_string());
+
+
+        
+
+        /*
+        let simp_ast: AST = match AST::partial_evaluation(expanded_ders) {
+            Ok(x) => match x.simplify_expression() {
+                Ok(y) => y,
+                Err(msg) => panic!("\n{}", msg),
+            },
+            Err(msg) => panic!("\n{}", msg),
+        };
+        
+         */
+        let simp_ast: AST = match expanded_ders.simplify_expression() {
+            Ok(x) => match x.partial_evaluation() {
+                Ok(y) => y,
+                Err(msg) => panic!("\n{}", msg),
+            },
+            Err(msg) => panic!("\n{}", msg),
+        };
+
+        println!("Simplified AST stringified: \n\n\t{}\n\n", simp_ast.to_string());
+
+        
+
+    }
 }

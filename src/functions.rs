@@ -1,6 +1,7 @@
 use std::{
     cell::RefCell,
     f64::consts::{E, PI},
+    mem::transmute,
     rc::Rc,
 };
 
@@ -26,6 +27,8 @@ pub const FN_STR_ATAN: &'static str = "arctan";
 pub const FN_STR_EXP: &'static str = "exp";
 pub const FN_STR_LN: &'static str = "ln";
 pub const FN_STR_ABS: &'static str = "abs";
+pub const FN_STR_FLOOR: &'static str = "floor";
+pub const FN_STR_CEIL: &'static str = "ceil";
 
 //constants
 pub const CONST_STR_PI: &'static str = "pi";
@@ -34,6 +37,30 @@ pub const CONST_STR_RAD2DEG: &'static str = "rad2deg";
 pub const CONST_STR_PHI: &'static str = "phi";
 pub const CONST_STR_E: &'static str = "e";
 pub const CONST_STR_TAU: &'static str = "tau";
+
+pub const LIST_CONST_STR: [&'static str; 6] = [
+    CONST_STR_PI,
+    CONST_STR_DEG2RAD,
+    CONST_STR_RAD2DEG,
+    CONST_STR_PHI,
+    CONST_STR_E,
+    CONST_STR_TAU,
+];
+
+pub const LIST_CONST_VAUE_STR: [(&'static str, Number); 6] = [
+    (CONST_STR_PI, Number::Real(PI)),
+    (CONST_STR_DEG2RAD, Number::Real(PI / (180 as f64))),
+    (CONST_STR_RAD2DEG, Number::Real(180 as f64 / PI)),
+    (
+        CONST_STR_PHI,
+        Number::Real(unsafe { transmute::<u64, f64>(0x3ff9e3779b97f4a8) }),
+    ),
+    (CONST_STR_E, Number::Real(E)),
+    (CONST_STR_TAU, Number::Real(PI * 2 as f64)),
+];
+
+//const phi: f64 = f64::from_bits(0x3ff9e3779b97f4a8);
+//const phi: f64 = unsafe { transmute::<u64, f64>(0x3ff9e3779b97f4a8) } ;
 
 pub struct Functions {}
 pub struct Constants {}
@@ -72,19 +99,21 @@ impl Functions {
                             Number::is_perfect_square(den as i64),
                         ) {
                             (None, None) => Ok(Number::new_real((num as f64 / den as f64).sqrt())),
-                            (None, Some(d)) => {
-                                Ok(Number::new_real((num as f64).sqrt() / (d as f64)))
+                            (None, Some(sqrt_d)) => {
+                                Ok(Number::new_real((num as f64).sqrt() / (sqrt_d as f64)))
                             }
-                            (Some(n), None) => {
+                            (Some(sqrt_n), None) => {
                                 /*
                                 Use rationalitzation for better numerical performance:
+                                x = a*a/b => sqrt(x) = sqrt(a * a)/sqrt(b)
                                 a/sqrt(b) = a * sqrt(b)/sqrt(b) * sqrt(b) = a * sqrt(b) / b
                                 */
-                                let d: f64 = den as f64;
-                                let rationalized: f64 = n as f64 * d.sqrt() / d;
-                                Ok(Number::new_real(rationalized))
+
+                                let f_den: f64 = den as f64;
+                                let rationalized: f64 = (sqrt_n as f64 * f_den.sqrt()) / f_den;
+                                Ok(Number::Real(rationalized))
                             }
-                            (Some(n), Some(d)) => Ok(Number::new_rational(n, d as u64)?),
+                            (Some(sqrt_n), Some(sqrt_d)) => Ok(Number::Rational(sqrt_n, sqrt_d as u64)),
                         }
                     }
                 }
@@ -150,8 +179,7 @@ impl Functions {
             FN_STR_ABS => {
                 match input {
                     Number::Real(r) => Ok(Number::new_real(r.abs())),
-                    Number::Rational(num, den) => Ok(Number::new_rational(num.abs(), den)
-                        .expect("The number was already rational")),
+                    Number::Rational(num, den) => Ok(Number::Rational(num.abs(), den)),
                 }
             }
 
@@ -488,15 +516,51 @@ impl Constants {
         //if the constant is not found
 
         return match constant_name.to_lowercase().as_ref() {
-            CONST_STR_PI => Some(Number::new_real(PI)),
-            CONST_STR_DEG2RAD => Some(Number::new_real(PI / 180 as f64)),
-            CONST_STR_RAD2DEG => Some(Number::new_real(180 as f64 / PI)),
-            CONST_STR_PHI => Some(Number::new_real(
-                (1.0 as f64 + (5.0 as f64).sqrt()) / 2.0 as f64,
-            )),
-            CONST_STR_E => Some(Number::new_real(E)),
-            CONST_STR_TAU => Some(Number::new_real(PI * 2 as f64)),
+            CONST_STR_PI => Some(LIST_CONST_VAUE_STR[0].1.clone()),
+            CONST_STR_DEG2RAD => Some(LIST_CONST_VAUE_STR[1].1.clone()),
+            CONST_STR_RAD2DEG => Some(LIST_CONST_VAUE_STR[2].1.clone()),
+            CONST_STR_PHI => Some(LIST_CONST_VAUE_STR[3].1.clone()),
+            CONST_STR_E => Some(LIST_CONST_VAUE_STR[4].1.clone()),
+            CONST_STR_TAU => Some(LIST_CONST_VAUE_STR[5].1.clone()),
             _ => None,
         };
     }
+
+    /// If the given number is very close to a constant, returns it's str name
+    pub fn is_constant(num: &Number) -> Option<&str> {
+        let tolerance: f64 = 0.00001;
+
+        for (s, n) in LIST_CONST_VAUE_STR {
+            if num.in_tolerance_range(&n, tolerance) {
+                return Some(s); 
+            }
+        }
+
+        None
+
+        /* 
+        if num.in_tolerance_range(&Number::new_real(PI), tolerance) {
+            Some(&CONST_STR_PI)
+        } else if num.in_tolerance_range(&Number::new_real(PI / 180 as f64), tolerance) {
+            Some(&CONST_STR_DEG2RAD)
+        } else if num.in_tolerance_range(&Number::new_real(180 as f64 / PI), tolerance) {
+            Some(&CONST_STR_RAD2DEG)
+        } else if num.in_tolerance_range(
+            &Number::new_real((1.0 as f64 + (5.0 as f64).sqrt()) / 2.0 as f64),
+            tolerance,
+        ) {
+            Some(&CONST_STR_PHI)
+        } else if num.in_tolerance_range(&Number::new_real(E), tolerance) {
+            Some(&CONST_STR_E)
+        } else if num.in_tolerance_range(&Number::new_real(PI * 2 as f64), tolerance) {
+            Some(&CONST_STR_TAU)
+        } else {
+            None
+        }
+
+        */
+
+    }
+
+
 }

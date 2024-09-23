@@ -24,10 +24,10 @@ pub fn get_ptr<T>(x: T) -> Rc<RefCell<T>>{
 ///
 /// No further processing is done.
 pub fn tokenize_input(idfas: &mut Vec<InstanceDFA>, input: &String) -> Vec<Token> {
-    let mut chars = input.chars();
+    let mut chars: std::str::Chars<'_> = input.chars();
 
-    let mut is_separator: bool = SEPARATORS.binary_search(&chars.nth(0).unwrap()).is_ok();
-    let final_c: char = chars.nth(input.len() - 2).unwrap();
+    let mut is_separator: bool = SEPARATORS.binary_search(&chars.nth(0).expect("Input should contain at leas 1 character")).is_ok();
+    let final_c: char = chars.nth(input.chars().count() - 2).unwrap();
 
     let mut token_list: Vec<Token> = vec![];
     let mut current_lexeme: Vec<char> = vec![];
@@ -110,7 +110,7 @@ pub fn constant_matcher(mut input: Vec<Token>) -> Vec<Token> {
             match Constants::get_constant(element.lexeme.clone().unwrap().as_ref()) {
                 Some(number) => {
                     element.class = TokenClass::Number;
-                    element.lexeme = Some(number.as_str());
+                    element.lexeme = Some(number.as_numerical_str());
                 }
                 None => {}
             }

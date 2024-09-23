@@ -1,9 +1,10 @@
 use integer_sqrt::IntegerSquareRoot;
+use rand::prelude::*;
 use rayon::prelude::*;
 
 use crate::*;
 use core::panic;
-use std::{cell::RefCell, rc::Rc, time::Instant};
+use std::{cell::RefCell, f64::consts::PI, rc::Rc, time::Instant};
 
 #[test]
 fn stringify_ast_test() {
@@ -55,6 +56,9 @@ fn global_derive_test() {
 
 #[test]
 fn printing_numbers() {
+    let b: Number = Number::Real(PI*1.333);
+    assert_eq!(b.as_str(), "4.18774");
+
     let a: Number = Number::Rational(7, 3);
     assert_eq!(a.as_str(), "7/3");
 }
@@ -298,7 +302,7 @@ fn perf_square_speed() {
     Test: 2^38
         Basic   :  77.65 s
         New     : 133.80 s  (1.72x)
-    V2: 2^32
+    V2: 2^32 (non-paralel)
         Basic       :  (91.01, 93.22, 93.24)    s (1.0x)
         New         :  (152.60, 152.97, 152.54, 150.30) s (1.73x)
         Un-opt      :  (565.04, 568.99, 561.52) s (6.14x)
@@ -708,11 +712,15 @@ fn derive_test() {
     let tree_list: Vec<(AST, Number, Number)> = vec![
         (tree1, Number::Rational(1, 1), Number::Rational(1, 1)),
         (tree2, Number::Rational(1, 1), Number::Rational(6, 1)),
-        (tree3, Number::Rational(1, 2), Number::Real(-2.785929065537081)),
+        (
+            tree3,
+            Number::Rational(1, 2),
+            Number::Real(-2.785929065537081),
+        ),
     ];
 
     for (ast, eval_point, solution) in tree_list {
-        let (der, _): (AST, bool) = match ast.execute_derives(false) {
+        let (der, _): (AST, bool) = match ast.execute_derives(false, false) {
             Ok(v) => v,
             Err(e) => panic!(
                 "{} ||| {} ({:?}) = {:?}",
@@ -737,11 +745,10 @@ fn derive_test() {
             ),
         };
 
-        
         if !awnser.in_tolerance_range(&solution, 0.0000001) {
             panic!(
                 "Non-equal results. Got {:?} ||| {} ({:?}) = {:?}",
-                awnser, 
+                awnser,
                 der.to_string(),
                 eval_point,
                 solution
@@ -751,3 +758,179 @@ fn derive_test() {
 
     //panic!();
 }
+
+#[test]
+fn is_constant_expected_test() {
+    let mut rng: ThreadRng = thread_rng();
+    let f: fn(&Number) -> Option<&str> = functions::Constants::is_constant;
+    let desviation: f64 = 0.00001;
+    let mut add_rand = || (rng.gen::<f64>() * 2.0 - 1.0) * desviation;
+    // addrand gives an uniformly distributed value in [-desviation, desviation]
+
+    let iters: usize = 10000;
+    for _i in 0..iters {
+        let (num, s): (f64, &str) = (core::f64::consts::PI, "pi");
+        if let Some(const_str) = f(&Number::new_real(num + add_rand())) {
+            if const_str != s {
+                panic!()
+            }
+        } else {
+            panic!()
+        }
+
+        let (num, s): (f64, &str) = (core::f64::consts::PI / 180 as f64, "deg2rad");
+        if let Some(const_str) = f(&Number::new_real(num + add_rand())) {
+            if const_str != s {
+                panic!()
+            }
+        } else {
+            panic!()
+        }
+
+        let (num, s): (f64, &str) = (180.0 as f64 / core::f64::consts::PI, "rad2deg");
+        if let Some(const_str) = f(&Number::new_real(num + add_rand())) {
+            if const_str != s {
+                panic!()
+            }
+        } else {
+            panic!()
+        }
+
+        let (num, s): (f64, &str) = ((1.0 as f64 + (5.0 as f64).sqrt()) / 2.0 as f64, "phi");
+        if let Some(const_str) = f(&Number::new_real(num + add_rand())) {
+            if const_str != s {
+                panic!()
+            }
+        } else {
+            panic!()
+        }
+    }
+
+
+}
+
+#[test]
+fn is_constant_unexpected_test() {
+
+    let f: fn(&Number) -> Option<&str> = functions::Constants::is_constant;
+
+    let failable_part: bool = false; 
+
+    if failable_part {
+        // should pass most times (0.6 < )
+        let iters: usize = 1 << 16;
+        let _ = (0..iters).into_par_iter().for_each_init(
+            || rand::thread_rng(),
+            |rand_gen, _i| {
+                let num: f64 = rand_gen.gen::<f64>() * 10.0;
+                if let Some(s) = f(&Number::Real(num)) {
+                    panic!("Number: {} \t classifed as: {}", num, s);
+                }
+            },
+        );
+    }
+        
+    let iters: usize = 1 << 24;
+    let _ = (0..iters).into_par_iter().for_each_init(
+        || rand::thread_rng(),
+        |rand_gen, _i| {
+            let num: f64 = rand_gen.gen::<f64>() * 90.0+10.0;
+            if num as i32 != 57 {
+                if let Some(s) = f(&Number::Real(num)) {
+                    panic!("Number: {} \t classifed as: {}", num, s);
+                }
+            }
+        },
+    );
+
+    let iters: usize = 1 << 24;
+    let _ = (0..iters).into_par_iter().for_each_init(
+        || rand::thread_rng(),
+        |rand_gen, _i| {
+            let num: f64 = rand_gen.gen::<f64>() * -10.0;
+            if let Some(s) = f(&Number::Real(num)) {
+                panic!("Number: {} \t classifed as: {}", num, s);
+            }
+        },
+    );
+
+}
+
+#[test]
+fn rand_quick() {
+    let mut rng: ThreadRng = thread_rng();
+    let desviation: f64 = 1.0;
+    let mut add_rand = || (rng.gen::<f64>() * 2.0 - 1.0) * desviation;
+
+    for _i in 0..20 {
+        println!("{}", add_rand());
+    }
+
+    panic!()
+}
+
+/*
+
+Maybe formalize latter:
+
+der(x*tan(x))
+
+=> 1*tan(x)+(tan(x)^2+1)*1*x
+tan(x)+(tan(x)^2+1)*x
+tan(x) + x/cos(x)^2
+
+====================
+
+der(x^(arcsin(x)^2))
+
+=> x^arcsin(x)^2*(1*arcsin(x)^2/x+2*arcsin(x)^1*1/sqrt(1-x^2)*ln(x))
+x^arcsin(x)^2*(arcsin(x)^2/x+2*arcsin(x)/sqrt(1-x^2)*ln(x))
+x^arcsin(x)^2*(arcsin(x)^2/x+2*arcsin(x)*ln(x)/sqrt(1-x^2))
+
+================
+
+der(8^cos(e^x) + sqrt(x^2 - ln(x)) + 11/2 * 8*x * e^x * ln(2*x + 1))
+der(8^cos(e^x))     => 8^(cos(e^x)*2.0794)*-1*sin(e^x)*e^x*1*1
+
+-8^cos(e^x)*ln(8)*sin(e^x)*e^x
+
+correct: -ln(8)*e^x*8^cos(e^x) *sin(e^x)
+
+der(sqrt(x^2 - ln(x))) => (2*x-1/x)/(2*sqrt(x^2-ln(x)))
+
+
+der(11/2 * 8*x * e^x * ln(2*x + 1))
+    => ((((0*2-0*11)/2^2*8+0*11/2)*x+1*11/2*8)*e^x+e^x*1*1*11/2*8*x)*ln(2*x+1)+(0*x+1*2+0)/(2*x+1)*11/2*8*x*e^x
+    => (((11/2*8)*e^x+e^x*11/2*8*x)*ln(2*x+1)+(1*2)/(2*x+1)*11/2*8*x*e^x
+^correct
+
+===================
+
+der(sin(raíz(e^x + pi) / 2))
+
+=> cos(sqrt(e^x+pi)/2)*((e^x*1*1+0)/(2*sqrt(e^x+pi))*2-0*sqrt(e^x+pi))/2^2
+cos(sqrt(e^x+pi)/2)*(e^x/sqrt(e^x+pi))/4
+
+der(der(sin(sqrt(e^x + pi) / 2)))
+
+=> -1*sin(sqrt(e^x+pi)/2)*((e^x*1*1+0)/(2*sqrt(e^x+pi))*2-0*sqrt(e^x+pi))/2^2*e^x/sqrt(e^x+pi)/4+((e^x*1*1*sqrt(e^x+pi)-(e^x*1*1+0)/(2*sqrt(e^x+pi))*e^x)/sqrt(e^x+pi)^2*4-0*e^x/sqrt(e^x+pi))/4^2*cos(sqrt(e^x+pi)/2)
+-sin(sqrt(e^x+pi)/2)*e^x/sqrt(e^x+pi)/4*e^x/sqrt(e^x+pi)/4+((e^x*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*e^x)/sqrt(e^x+pi)^2*4)/16*cos(sqrt(e^x+pi)/2)
+
+-1*sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(2^2*sqrt(e^x+pi)^2)*2*4/16*cos(sqrt(e^x+pi)/2)
+
+
+====================
+
+// 3^4 = 81
+
+(x*3)^4
+
+=> x^4*3^4 => x^4*81
+
+(x/2)^5
+
+=> x^5/32
+
+
+
+*/

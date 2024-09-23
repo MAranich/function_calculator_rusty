@@ -1,8 +1,19 @@
 use core::fmt;
 use rand::Rng;
-use std::{cell::RefCell, iter::zip, ops, rc::Rc, vec};
+use std::{
+    cell::{Ref, RefCell},
+    iter::zip,
+    ops,
+    rc::Rc,
+    vec,
+};
 
-use crate::functions::Functions;
+use crate::{
+    functions::{self, Functions},
+    get_ptr,
+};
+
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /// Represents the state that all [DFA] will start.
 const INITIAL_STATE: u16 = 1;
@@ -54,11 +65,17 @@ pub const NUM_DFA_CATEGORY_T: usize = 4;
 
 /// A representation of a [Number].
 ///
-/// It can be a rational number (can be expresed as a/b,
-/// where b!=0 and a and b are whole numbers). This duality allows to perform some basic
+/// It can be a rational number [Number::Rational] (can be expresed as a/b,
+/// where b!=0 and a and b are whole numbers) or a real number [Number::Real]
+/// (to cover all other edge cases). This duality allows to perform some basic
 /// operations between real numbers in a fast and exact way while retaining the versatility
-/// of the eral numbers when the rationals are not enough.
-#[derive(PartialEq, Clone)]
+/// of the real numbers when the rationals are not enough.
+///
+/// Note that for any [Number::Rational], there is the invariant that the
+/// denominator (the second number, the u64) is never 0. If you want to create
+/// a rational number that you do not know if it has a 0 as denominator or not,
+/// use [Number::new_rational].
+#[derive(Clone)]
 pub enum Number {
     /// A number that cannot be expressed as a/b
     Real(f64),
@@ -813,7 +830,7 @@ impl SRA {
         //let values_slice = &self.ast[start_idx..(end_idx - 1)];
         let mut oper_token: AST = self.ast.pop().unwrap();
 
-        let new_childs = self.ast.drain(start_idx..(end_idx - 1));
+        let new_childs: vec::Drain<'_, AST> = self.ast.drain(start_idx..(end_idx - 1));
 
         new_childs.for_each(|x| oper_token.add_children(x));
         //new_childs.for_each(|x| oper_token.children.push(Rc::new(RefCell::new(x))));
@@ -865,6 +882,9 @@ impl AST {
     ///
     /// The order of the child matters even if the operation is commutative.
     /// To fix this, [AST::sort] can be called before.
+    ///
+    /// **IMPORTANT**: this does **NOT** check if the 2 [AST] are mathematically equivalent but
+    /// written in a different form. It just checks for *exact* equivalence.
     pub fn equal(&self, other: &Self) -> bool {
         // check that they have the same value + same number of childs
         if self.value != other.value || self.children.len() != other.children.len() {
@@ -928,7 +948,7 @@ impl AST {
         while let Some(current_node) = nodes.pop() {
             // current_node = nodes.pop().unwrap();
 
-            let borrow_node: std::cell::Ref<AST> = current_node.borrow();
+            let borrow_node: Ref<'_, AST> = current_node.borrow();
 
             if borrow_node.children.len() == 0 {
                 //is a leaf
@@ -980,12 +1000,12 @@ impl AST {
         return Ok(());
     }*/
 
-    /// Simplifies the parts of the tree that can be substitutes by the correspondent numerical value.
+    /// Simplifies the parts of the tree that can be substitutes by the correspondent [Number] value.
     ///
-    /// If expression contains no variables, call direcly `evaluate()` since it's more efficient.
+    /// If expression contains no variables, call direcly [AST::evaluate] since it's more efficient.
     /// Will return an error if the expression is not valid (dividing by 0 or by
     /// evaluating a function outside it's domains).
-    pub fn simplify_expression(self) -> Result<Self, String> {
+    pub fn partial_evaluation(self) -> Result<Self, String> {
         // todo!("Add basic arithmetic simplifications: ")
 
         let original_node: Rc<RefCell<AST>> = Rc::new(RefCell::new(self));
@@ -1012,11 +1032,9 @@ impl AST {
             }
         }
 
-        let arithmetical = Rc::try_unwrap(original_node)
+        let ret: AST = Rc::try_unwrap(original_node)
             .expect("Failed to unwrap Rc. ")
             .into_inner();
-
-        let ret: AST = arithmetical.simplify_arithmetical()?;
 
         return Ok(ret);
     }
@@ -1032,19 +1050,67 @@ impl AST {
     /// 7)      x ^ 1 = x
     /// 8)      x ^ 0 = 1
     /// 10)     1 ^ x = 1
-    /// 12)     sqrt(x^(2*a)) = |x|^a    // a is whole
     /// 13)     x + a + x = 2*x + a
     /// 14)     -(-x) = x
     /// 15.1)   (a/b) / (c/d) = a*d / (b*c)
     /// 15.2)   (a/b) / c = a / (b*c)
     /// 15.3)   a / (b/c) = a*c / b
+    /// 16)     (x * y)^a = x^a * y^a
+    /// 17)     (x / y)^a = x^a / y^a
+    /// 19)     (a^b)^c = a^(b*c)
+    /// 20.1)     a * 1/b = a/b    
+    /// 20.2)     a * (c/b) = (a*c)/b       (where c is a constant (number))
+    /// Unimplemented:
+    /// 12)     sqrt(x^(2*a)) = |x|^a    // a is whole
+    /// 18)     x^-a = 1/x^a
     ///
     ///
-    /// Discarded:  9)   0 ^ x = 0       (if x is neg or 0, it does not work)
-    /// 11)  x^a * x^b = x^(a+b)         (done in join_terms)
+    /// Discarded:  
+    /// 9)   0 ^ x = 0                  (if x is neg or 0, it does not work)
+    /// 11)  x^a * x^b = x^(a+b)        (done in join_terms)
     ///
-    /// Assumes numerical subtrees has been evaluated. Otherwise call [AST::simplify_expression].
-    fn simplify_arithmetical(self) -> Result<Self, String> {
+    /// Assumes all numerical subtrees have been evaluated 
+    /// (parts of the tree that do not depend on the variable (x)).
+    /// Otherwise call [AST::partial_evaluation] first.
+    pub fn simplify_expression(self) -> Result<Self, String> {
+        /*
+        Idea: we have 2 instances of the AST, prev (previous) and cons (consequent).
+        If prev != cons then some changes have been made, wich means that there
+        could be more changes to do (perhaps unlocked by the previous simplifications).
+        So we discard prev and set prev = cons. Then we compute cons = prev.simplify_step()
+        and repeat.
+
+        If there are no changes that means that the expression could not be simplified more
+        with our rules, therefore we can return. We will also include a security term
+        that counts the number of iterations so we don't end up iterating infinitely.
+
+        */
+
+        #[allow(non_snake_case)]
+        let MAX_NUMBER_OF_ITERS: i32 = 32;
+
+        let mut previous: AST = AST_ZERO.clone(); //filler just to enter loop
+        let mut consequent: AST = self;
+        let mut i: i32 = 0;
+
+        while !previous.eq(&consequent) {
+            previous = consequent;
+
+            consequent = previous.deep_copy().simplify_step()?;
+
+            i = i + 1;
+            if MAX_NUMBER_OF_ITERS <= i {
+                return Err(String::from(
+                    "Possibly infinite simplification recursion. Recheck implementation rules. ",
+                ));
+                //return Ok(consequent);
+            }
+        }
+
+        return Ok(consequent);
+    }
+
+    fn simplify_step(mut self) -> Result<Self, String> {
         // Debugging tools:
         #[allow(non_snake_case)]
         let PRINT_DGB_STATEMENTS: bool = false;
@@ -1135,56 +1201,121 @@ impl AST {
                     break 'mult self.children[i].borrow().deep_copy();
                 }
 
-                // done in join terms
-                /*
-                let is_exp_with_same_base: bool = 'exp_check: {
-                    if let Element::Exp = self.children[0].borrow().value {
+                // 20.1)     a * 1/b = a/b
+                // 20.2)     a * (c/b) = (a*c)/b       (where c is a constant (number))
+
+                // first determine if either the left or right term have the form c / a,
+                // where a is anything valid and c is a constant.
+
+                let is_left_inverse: Option<Number> = {
+                    if self.children[0].borrow().value == Element::Div {
+                        if let Element::Number(n) =
+                            self.children[0].borrow().children[0].borrow().value.clone()
+                        {
+                            Some(n)
+                        } else {
+                            None
+                        }
                     } else {
-                        break 'exp_check false;
+                        None
                     }
-
-                    if let Element::Exp = self.children[1].borrow().value {
+                };
+                let is_right_inverse: Option<Number> = {
+                    if self.children[1].borrow().value == Element::Div {
+                        if let Element::Number(n) =
+                            self.children[1].borrow().children[0].borrow().value.clone()
+                        {
+                            Some(n)
+                        } else {
+                            None
+                        }
                     } else {
-                        break 'exp_check false;
-                    }
-
-                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow();
-                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow();
-
-                    match (base_0_aux.children.get(0), base_1_aux.children.get(0)) {
-                        (None, None) => false,
-                        (None, Some(_)) => false,
-                        (Some(_), None) => false,
-                        (Some(b1), Some(b2)) => b1.borrow().equal(&b2.borrow()),
+                        None
                     }
                 };
 
-                if is_exp_with_same_base {
-                    // both children are exponents and have the same base
-                    // x^a + x^b => x^(a+b)
+                match (is_left_inverse, is_right_inverse) {
+                    (Some(n1), Some(n2)) => {
+                        let numertator: Number = n1 * n2;
 
-                    // a+b
-                    let base_0_aux: std::cell::Ref<AST> = self.children[0].borrow();
-                    let base_1_aux: std::cell::Ref<AST> = self.children[1].borrow();
-                    let sum_exp: AST = AST {
-                        value: Element::Add,
-                        children: vec![
-                            Rc::new(RefCell::new(base_0_aux.children[1].borrow().deep_copy())),
-                            Rc::new(RefCell::new(base_1_aux.children[1].borrow().deep_copy())),
-                        ],
-                    };
+                        let denominator: AST = AST {
+                            value: Element::Mult,
+                            children: vec![
+                                Rc::clone(&self.children[0].borrow().children[1]),
+                                Rc::clone(&self.children[1].borrow().children[1]),
+                            ],
+                        };
 
-                    // x^(a+b)
-                    let power = AST {
-                        value: Element::Exp,
-                        children: vec![
-                            Rc::new(RefCell::new(base_0_aux.children[0].borrow().deep_copy())),
-                            Rc::new(RefCell::new(sum_exp)),
-                        ],
-                    };
+                        self.value = Element::Div;
+                        self.children =
+                            vec![get_ptr(AST::from_number(numertator)), get_ptr(denominator)];
+                        break 'mult self;
+                    }
+                    (None, Some(num)) => {
+                        // a * (c/b), c is constant => (c*a)/b
 
-                    break 'mult power;
-                }*/
+                        if num.eq(&Number::Rational(1, 1)) {
+                            // no need for multiplication by 1. Just return a/b
+                            let numerator: Rc<RefCell<AST>> = Rc::clone(&self.children[0]);
+                            let denominator: Rc<RefCell<AST>> =
+                                Rc::clone(&self.children[1].borrow().children[1]);
+
+                            self.value = Element::Div;
+                            self.children = vec![numerator, denominator];
+
+                            break 'mult self;
+                        }
+
+                        // otherwise do the general case
+
+                        let numerator: AST = AST {
+                            value: Element::Mult,
+                            children: vec![
+                                get_ptr(AST::from_number(num)),
+                                Rc::clone(&self.children[0]),
+                            ],
+                        };
+
+                        let denominator: Rc<RefCell<AST>> =
+                            Rc::clone(&self.children[1].borrow().children[1]);
+
+                        self.value = Element::Div;
+                        self.children = vec![get_ptr(numerator), denominator];
+                        break 'mult self;
+                    }
+                    (Some(num), None) => {
+                        // c/a * b, c is constant => (c*b)/a
+
+                        if num.eq(&Number::Rational(1, 1)) {
+                            // no need for multiplication by 1. Just return a/b
+                            let numerator: Rc<RefCell<AST>> = Rc::clone(&self.children[1]);
+                            let denominator: Rc<RefCell<AST>> =
+                                Rc::clone(&self.children[0].borrow().children[1]);
+
+                            self.value = Element::Div;
+                            self.children = vec![numerator, denominator];
+
+                            break 'mult self;
+                        }
+
+                        let numerator: AST = AST {
+                            value: Element::Mult,
+                            children: vec![
+                                get_ptr(AST::from_number(num)),
+                                Rc::clone(&self.children[1]),
+                            ],
+                        };
+
+                        let denominator: Rc<RefCell<AST>> =
+                            Rc::clone(&self.children[0].borrow().children[1]);
+
+                        self.value = Element::Div;
+                        self.children = vec![get_ptr(numerator), denominator];
+
+                        break 'mult self;
+                    }
+                    _ => {}
+                }
 
                 self
             }
@@ -1202,6 +1333,75 @@ impl AST {
                 // 6)   x/x = 1
                 if self.children[0].borrow().equal(&self.children[1].borrow()) {
                     break 'div AST_ONE.clone(); // no deep_clone because it has no children
+                }
+
+                // 17)     x^-a = 1/x^a
+                // If `-a` is a negative number
+                {
+                    //let power: &Element = &self.children[1].borrow().value;
+                    let negative_exponent: Option<Number> =
+                        if let Element::Number(num) = &self.children[1].borrow().value {
+                            if !num.is_positive() {
+                                let neg_num: Number = match num {
+                                    Number::Real(r) => Number::Real(-*r),
+                                    Number::Rational(n, d) => Number::Rational(-*n, *d),
+                                };
+                                Some(neg_num)
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+
+                    if let Some(num) = negative_exponent {
+                        //set exp to the negative of what it was (now positive)
+                        assert!(num.is_positive());
+                        self.children[1].borrow_mut().value = Element::Number(num);
+                        // 1/b^(-e)
+                        let invert: AST = AST {
+                            value: Element::Div,
+                            children: vec![get_ptr(AST_ONE.clone()), get_ptr(self)],
+                        };
+                        break 'div invert;
+                    }
+                    /*
+                    match negative_exponent {
+                        Some(num) => {
+                            //set exp to the negative of what it was (now positive)
+                            assert!(num.is_positive());
+                            self.children[1].borrow_mut().value = Element::Number(num);
+                            // 1/b^(-e)
+                            let invert: AST = AST {
+                                value: Element::Div,
+                                children: vec![get_ptr(AST_ONE.clone()), get_ptr(self)],
+                            };
+                            break 'div invert;
+                        }
+                        None => {
+                            // Nothing to do. This is just for the borrow checker.
+                        }
+                    }*/
+                }
+
+                // 17)     x^-a = 1/x^a     (v2)
+                // if `-a` is a negation of something
+                {
+                    if self.children[1].borrow().value == Element::Neg {
+                        // get reference to the exponent (minus the negation)
+                        let ptr_exp: Rc<RefCell<AST>> =
+                            Rc::clone(&self.children[1].borrow_mut().children[0]);
+
+                        //drop negation and put the positive exponet
+                        self.children[1] = ptr_exp;
+
+                        // 1/ self^-x
+                        let invert: AST = AST {
+                            value: Element::Div,
+                            children: vec![get_ptr(AST_ONE.clone()), get_ptr(self)],
+                        };
+                        break 'div invert;
+                    }
                 }
 
                 // 15) (a/b) / (c/d) = a*d / (b*c)  (+variants with only 1 nested division)
@@ -1281,6 +1481,59 @@ impl AST {
                     break 'exp AST_ONE.clone(); // no deep_clone because it has no children
                 }
 
+                // 16)     (x * y)^a = x^a * y^a
+                // 17)     (x / y)^a = x^a / y^a
+
+                // If the exponent is simple
+                let exponent_val: Element = self.children[1].borrow().value.clone();
+                if let Element::Number(exp) = exponent_val {
+                    let base_opertation: Element = self.children[0].borrow().value.clone();
+                    if base_opertation == Element::Mult || base_opertation == Element::Div {
+                        let expression_0: Rc<RefCell<AST>> =
+                            Rc::clone(&self.children[0].borrow().children[0]);
+                        let expression_1: Rc<RefCell<AST>> =
+                            Rc::clone(&self.children[0].borrow().children[1]);
+
+                        let powered_expression_0: AST = AST {
+                            value: Element::Exp,
+                            children: vec![expression_0, get_ptr(AST::from_number(exp.clone()))],
+                        };
+
+                        let powered_expression_1: AST = AST {
+                            value: Element::Exp,
+                            children: vec![expression_1, get_ptr(AST::from_number(exp))],
+                        };
+
+                        self.value = base_opertation;
+                        self.children =
+                            vec![get_ptr(powered_expression_0), get_ptr(powered_expression_1)];
+                        break 'exp self;
+                    }
+                }
+
+                // 19)     (a^b)^c = a^(b*c)
+
+                if self.children[0].borrow().value == Element::Exp {
+                    // we have the requiered form
+
+                    let exp_1: Rc<RefCell<AST>> = Rc::clone(&self.children[1]);
+                    let exp_2: Rc<RefCell<AST>> = Rc::clone(&self.children[0].borrow().children[1]);
+
+                    let final_exponent: AST = AST {
+                        value: Element::Mult,
+                        children: vec![exp_1, exp_2],
+                    };
+
+                    let base: Rc<RefCell<AST>> = Rc::clone(&self.children[0].borrow().children[0]);
+
+                    // self.value = Element::Exp;
+                    // ^unnecessary, already done
+
+                    self.children = vec![base, get_ptr(final_exponent)];
+
+                    break 'exp self;
+                }
+
                 self
             }
             Element::Neg => {
@@ -1306,7 +1559,7 @@ impl AST {
             .map(|child: Rc<RefCell<AST>>| 'clos: {
                 // simplify aritmetically recursively
                 let simplified: Result<AST, String> =
-                    child.borrow().deep_copy().simplify_arithmetical();
+                    child.borrow().deep_copy().simplify_expression();
                 break 'clos simplified;
 
                 match simplified {
@@ -1316,10 +1569,7 @@ impl AST {
             })
             .collect();
 
-        ret.children = updated?
-            .into_iter()
-            .map(|updated| Rc::new(RefCell::new(updated)))
-            .collect();
+        ret.children = updated?.into_iter().map(|x| get_ptr(x)).collect();
 
         if PRINT_DGB_STATEMENTS {
             println!("Out [{:.4}]: {:?}\n", call_id, ret.to_string());
@@ -1339,21 +1589,139 @@ impl AST {
     /// 4) x^a * x^b * ... * x^n= x^(a+b+ ... +n)
     ///
     /// x can be any expresion, not just the variable. It may also reorder terms
-    pub fn join_terms(self) -> Result<Self, String> {
-        let (operation, operation_joiner): (Element, Element) = match self.value {
-            Element::Add => (Element::Add, Element::Mult),
-            Element::Mult => (Element::Mult, Element::Exp),
-            _ => return Ok(self),
+    pub fn join_terms(&self) -> Result<Self, String> {
+        /*
+        Plan: if multiple elements are multiplied/added they can be re-arranged.
+        For addition, we need to find the elements in common in the form:
+         (a * f) or f = (1 * f); where f is some function.
+
+         Then we can join then. For multiplication, we need to find:
+
+         (f^a) or f = (f^1) or 1/(f^a) = (f^-a) or 1/f = (f^-1)
+
+         */
+
+        fn matches_sum_form(input: Ref<'_, AST>, other: Ref<'_, AST>) -> Option<Number> {
+            /*
+            local function. Checks is the given AST follows the form of a sum or multiple of it.
+
+            input: f
+            other: f || f * a
+
+            if None, no correlation. If some(k), k is the multiplier of that therm
+
+            */
+
+            if input.eq(&other) {
+                return Some(Number::Rational(1, 1));
+            }
+
+            if other.value != Element::Mult {
+                return None;
+            }
+
+            if let Element::Number(n) = &other.children[0].borrow().value {
+                if other.children[1].borrow().eq(&input) {
+                    return Some(n.clone());
+                }
+            }
+
+            if let Element::Number(n) = &other.children[1].borrow().value {
+                if other.children[0].borrow().eq(&input) {
+                    return Some(n.clone());
+                }
+            }
+
+            None
+        }
+
+        fn matches_mult_form(input: Ref<'_, AST>, other: Ref<'_, AST>) -> Option<Number> {
+            /*
+            local function. Checks is the given AST follows the form of a multiple or power of it.
+
+            input: f
+            other: f || f ^ a || 1/f || 1/f^a
+
+            if None, no correlation. If some(k), k is the multiplier of that therm
+            */
+
+            // case other = f
+            if input.eq(&other) {
+                return Some(Number::Rational(1, 1));
+            }
+
+            match &other.value {
+                Element::Exp => {
+                    //case other = f^a      for some a: Number
+                    // if power is number and base is same as input
+                    if let Element::Number(n) = &other.children[0].borrow().value {
+                        if other.children[1].borrow().eq(&input) {
+                            return Some(n.clone());
+                        }
+                    }
+                }
+                Element::Div => 'div: {
+                    if let Element::Number(n) = &other.children[0].borrow().value {
+                        let is_numerator_one: bool = match n {
+                            Number::Real(r) => *r == 1.0,
+                            Number::Rational(n, d) => *n == 1 && *d == 1,
+                        };
+
+                        if is_numerator_one {
+                            break 'div;
+                        }
+
+                        // case other = 1/f
+                        if other.children[1].borrow().eq(&input) {
+                            return Some(Number::Rational(-1, 1));
+                        }
+
+                        // Case other = 1/f^a
+                        if let Element::Exp = other.children[1].borrow().value {
+                            // if denominator is exponential
+                            if let Element::Number(n) =
+                                &other.children[1].borrow().children[1].borrow().value
+                            {
+                                // and power is a number
+                                if other.children[1].borrow().children[0].borrow().eq(&input) {
+                                    // and base is f
+                                    let mut exponent: Number = n.clone();
+                                    exponent = exponent * Number::Rational(-1, 1);
+                                    return Some(exponent);
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => return None,
+            }
+
+            None
+        }
+
+        let (operation, operation_joiner, compare): (
+            Element,
+            Element,
+            fn(Ref<'_, AST>, Ref<'_, AST>) -> Option<Number>,
+        ) = match self.value {
+            Element::Add => (Element::Add, Element::Mult, matches_sum_form),
+            Element::Mult => (Element::Mult, Element::Exp, matches_mult_form),
+            _ => return Ok(self.deep_copy()),
         };
         // operation is the operation we are working with, operation_joiner is the operator that
         // allows us to join multiple of the same elements into one.
 
         // childs vec will contain the childs of self with the same element as self
         let mut childs: Vec<Rc<RefCell<AST>>> = Vec::new();
-
         {
-            let mut stack: Vec<Rc<RefCell<AST>>> = vec![Rc::new(RefCell::new(self))];
+            // 1st iteration manual because type system
+            let mut stack: Vec<Rc<RefCell<AST>>> = vec![];
+            //already know self.value == operation
+            self.children
+                .iter()
+                .for_each(|ch| stack.push(Rc::clone(ch)));
 
+            //let mut stack: Vec<Rc<RefCell<AST>>> = vec![Rc::new(RefCell::new(self))];
             while let Some(ast) = stack.pop() {
                 if ast.borrow().value == operation {
                     ast.borrow()
@@ -1364,33 +1732,41 @@ impl AST {
                     childs.push(Rc::clone(&ast));
                 }
             }
-            // assert!(stack.len() == 0);
+            assert!(stack.len() == 0);
         }
 
         // groups will contain each of the AST children and the ammount of times it has been seen.
         let mut groups: Vec<Rc<RefCell<AST>>> = Vec::new();
         while let Some(ast) = childs.pop() {
-            let mut counter: u32 = 1; // 1 is ast
+            let mut counter: Number = Number::Rational(1, 1); // 1 is ast (current one)
 
-            while let Some(other_ast_index) = childs
-                .iter()
-                .position(|ch| ast.borrow().equal(&ch.borrow()))
-            {
-                // some other child is exacly the same as the current one
-                counter += 1;
-                childs.swap_remove(other_ast_index);
+            loop {
+                // find if there exist other ast with same structure
+                let mut index_and_value_opt: Option<(usize, Number)> = None;
+                for (other_idx, other) in childs.iter().enumerate() {
+                    if let Some(magnitude) = compare(ast.borrow(), other.borrow()) {
+                        index_and_value_opt = Some((other_idx, magnitude));
+                    }
+                }
+
+                let index_and_value: (usize, Number) = match index_and_value_opt {
+                    Some(v) => v,
+                    None => break,
+                };
+
+                counter = counter + index_and_value.1;
+                childs.swap_remove(index_and_value.0);
             }
-            // create an AST that joins the elements accordingly
-            groups.push(Rc::new(RefCell::new(AST {
-                value: operation_joiner.clone(),
-                children: vec![
-                    ast,
-                    Rc::new(RefCell::new(AST::from_number(Number::Rational(
-                        counter as i64,
-                        1,
-                    )))),
-                ],
-            })));
+
+            if counter == Number::Rational(1, 1) {
+                groups.push(ast);
+            } else {
+                // create an AST that joins the elements accordingly
+                groups.push(Rc::new(RefCell::new(AST {
+                    value: operation_joiner.clone(),
+                    children: vec![ast, Rc::new(RefCell::new(AST::from_number(counter)))],
+                })));
+            }
         }
 
         // Now we need to join all the elements into a the AST structure
@@ -1399,7 +1775,7 @@ impl AST {
         let mut upper_layer: Vec<Rc<RefCell<AST>>> =
             Vec::with_capacity((base_layer.len() >> 1) + 1);
         let mut missing: Option<Rc<RefCell<AST>>> = None;
-        // ^ missing is meeded if the number if elements in base_layer is not even.
+        // ^ missing is needed if the number if elements in base_layer is not even.
         // It acts as a "carry" for the next iteration
 
         while 1 < base_layer.len() {
@@ -1458,7 +1834,7 @@ impl AST {
     ///
     /// otherwise does nothing
     #[allow(dead_code)]
-    fn sub_to_neg(&mut self) {
+    fn neg_to_sub(&mut self) {
         if self.value != Element::Neg {
             return;
         }
@@ -1470,6 +1846,38 @@ impl AST {
 
         self.value = Element::Add;
         self.children.push(Rc::new(RefCell::new(neg)));
+    }
+
+    /// If the [AST] has the form `-1*f`, where f is any expression,
+    /// the multiplication by -1 will be substituted to a negation.
+    ///
+    /// If the [AST] does not follow the `-1*f`, nothing will be done.
+    fn mult_neg1_to_neg(&mut self) {
+        if self.value != Element::Mult {
+            return;
+        }
+
+        let first_child_value: Element = self.children[0].borrow().value.clone();
+        if let Element::Number(num) = first_child_value {
+            if num.in_tolerance_range(&Number::Real(-1.0), 0.00001) {
+                let other: Rc<RefCell<AST>> = Rc::clone(&self.children[1]);
+                self.value = Element::Neg;
+                self.children = vec![other];
+                return;
+            }
+        }
+
+        let second_child_value: Element = self.children[1].borrow().value.clone();
+        if let Element::Number(num) = second_child_value {
+            if num.in_tolerance_range(&Number::Real(-1.0), 0.00001) {
+                let other: Rc<RefCell<AST>> = Rc::clone(&self.children[0]);
+                self.value = Element::Neg;
+                self.children = vec![other];
+                //return;
+            }
+        }
+
+        // nothing to do
     }
 
     /// Deep copies the [AST]
@@ -1540,8 +1948,8 @@ impl AST {
     pub fn to_string(&self) -> String {
         return match &self.value {
             Element::Derive => format!("der({})", self.children[0].borrow().to_string()),
-            Element::Function(iden) => {
-                format!("{}({})", iden, self.children[0].borrow().to_string())
+            Element::Function(identifier) => {
+                format!("{}({})", identifier, self.children[0].borrow().to_string())
             }
             Element::Add => {
                 format!(
@@ -1558,21 +1966,21 @@ impl AST {
                 )
             }
             Element::Mult => {
-                let child_left: std::cell::Ref<AST> = self.children[0].borrow();
+                let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_left.to_string(), //der, fn, mult, div, exp, fact, mod, neg
                 };
 
-                let child_right: std::cell::Ref<AST> = self.children[1].borrow();
+                let child_right: Ref<'_, AST> = self.children[1].borrow();
                 let right_side: String = match child_right.value.clone() {
                     Element::Add => format!("({})", child_right.to_string()),
                     Element::Sub => format!("({})", child_right.to_string()),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_right.to_string(), //der, fn, mult, div, exp, fact, mod, neg
@@ -1581,24 +1989,24 @@ impl AST {
                 format!("{}*{}", left_side, right_side)
             }
             Element::Div => {
-                let child_left: std::cell::Ref<AST> = self.children[0].borrow();
+                let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let numerator: String = match child_left.value.clone() {
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_left.to_string(), // der, fn, mult, div, exp, fact, mod, neg
                 };
 
-                let child_right: std::cell::Ref<AST> = self.children[1].borrow();
+                let child_right: Ref<'_, AST> = self.children[1].borrow();
                 let denominator: String = match child_right.value.clone() {
                     Element::Derive => child_right.to_string(),
                     Element::Function(_) => child_right.to_string(),
                     Element::Exp => child_right.to_string(),
                     Element::Fact => child_right.to_string(),
                     Element::Mod => child_right.to_string(),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
@@ -1608,24 +2016,24 @@ impl AST {
                 format!("{}/{}", numerator, denominator)
             }
             Element::Exp => {
-                let child_left: std::cell::Ref<AST> = self.children[0].borrow();
+                let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
                     Element::Derive => child_left.to_string(),
                     Element::Function(_) => child_left.to_string(),
                     Element::Fact => child_left.to_string(),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => format!("({})", child_left.to_string()),
                 };
 
-                let child_right: std::cell::Ref<AST> = self.children[1].borrow();
+                let child_right: Ref<'_, AST> = self.children[1].borrow();
                 let right_side: String = match child_right.value.clone() {
                     Element::Derive => child_right.to_string(),
-                    Element::Function(_) => child_left.to_string(),
+                    Element::Function(_) => child_right.to_string(),
                     Element::Exp => child_right.to_string(),
                     Element::Fact => child_right.to_string(),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
@@ -1635,12 +2043,12 @@ impl AST {
                 format!("{}^{}", left_side, right_side)
             }
             Element::Fact => {
-                let child: std::cell::Ref<AST> = self.children[0].borrow();
+                let child: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child.value.clone() {
                     Element::Derive => child.to_string(),
                     Element::Function(ident) => format!("{}({})", ident, child.to_string()),
                     Element::Fact => child.to_string(),
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => format!("({})", child.to_string()), // +, -, *, /, ^
@@ -1649,17 +2057,17 @@ impl AST {
                 format!("{}!", left_side)
             }
             Element::Mod => {
-                let child_left: std::cell::Ref<AST> = self.children[0].borrow();
+                let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_left.to_string(),
                 };
 
-                let child_right: std::cell::Ref<AST> = self.children[1].borrow();
+                let child_right: Ref<'_, AST> = self.children[1].borrow();
                 let right_side: String = match child_right.value.clone() {
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_right.to_string(),
@@ -1670,9 +2078,9 @@ impl AST {
             Element::Number(number) => number.as_str(),
             Element::Var => String::from("x"),
             Element::Neg => {
-                let child_left: std::cell::Ref<AST> = self.children[0].borrow();
+                let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
-                    Element::Number(number) => number.get_numerical().to_string(),
+                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     Element::Add => format!("({})", child_left.to_string()),
@@ -1748,6 +2156,32 @@ impl AST {
 
         self.value = Element::Derive;
         self.children = vec![Rc::new(RefCell::new(sub_tree))];
+    }
+
+    /// Returns true if the [AST] contains any [Element::Derive].
+    pub fn contains_derives(&self) -> bool {
+        if self.value == Element::Derive {
+            return true;
+        }
+
+        let mut stack: Vec<Rc<RefCell<AST>>> = Vec::new();
+        self.children
+            .iter()
+            .for_each(|ch| stack.push(Rc::clone(ch)));
+
+        while let Some(child) = stack.pop() {
+            if child.borrow().value == Element::Derive {
+                return true;
+            }
+
+            child
+                .borrow()
+                .children
+                .iter()
+                .for_each(|ch| stack.push(Rc::clone(ch)));
+        }
+
+        return false;
     }
 
     /// Derives the contents of the given [AST].
@@ -1885,9 +2319,9 @@ impl AST {
                 // If form a^f => a^f * ln(a)*f'
                 // If form f^g => f^g * (f' * g/f + g' * ln(f))
 
-                let contains_var_0: bool = self.children[0].borrow().contains_variable();
-                let contains_var_1: bool = self.children[1].borrow().contains_variable();
-                match (contains_var_0, contains_var_1) {
+                let base_contains_var: bool = self.children[0].borrow().contains_variable();
+                let exponent_contains_var: bool = self.children[1].borrow().contains_variable();
+                match (base_contains_var, exponent_contains_var) {
                     (true, true) => {
                         // f^g => f^g * (f' * g/f + g' * ln(f))
                         // oh, boy...
@@ -2036,7 +2470,25 @@ impl AST {
                     "Derivative of the factorial function is not supported. ",
                 ))
             }
-            Element::Mod => self.clone(), //just the identity
+            Element::Mod => {
+                //just the identity
+
+                /*
+                   h(x) = f(x) mod g(x) = f(x) - floor(f(x)/g(x)) * g(x)
+                               = f(x) - g(x) * floor(f(x)/g(x))
+
+                   if g(x) is constant then g'(x) = 0 and h'(x) = f'(x).
+                   Otherwise: (simplifiying derivative of floor(x) to 0)
+
+                   h'(x) = f'(x) - (floor'(f(x)/g(x))*(f(x)/g(x))'*g(x) + g'(x) * floor(f(x)/g(x)))
+                   h'(x) = f'(x) - 0*(f(x)/g(x))'*g(x) - g'(x) * floor(f(x)/g(x))
+                   h'(x) = f'(x) - g'(x) * floor(f(x)/g(x))
+
+                */
+
+                #[warn(UncompleteCode)]
+                self.clone()
+            }
             Element::Number(_) => AST {
                 //derivative of constant is 0
                 value: Element::Number(Number::Rational(0, 1)),
@@ -2069,14 +2521,17 @@ impl AST {
 
     /// Expants the derivated subtrees to it's corresponding derivated representation.
     ///
-    /// If there are no derives it just returns a deep clone of self and flag = false.
+    /// If there are no derives it just returns a deep clone of self and the bool flag = false.
     ///
     /// If `one_step = false`, then this will be executed until no more derives
-    /// are left in the tree.
+    /// are left in the tree. It also implies that the bool flag = false
     ///
     /// If successfull, the flag determines if there is any other [Element::Derive]
     /// left in the tree.
-    pub fn execute_derives(&self, one_step: bool) -> Result<(Self, bool), String> {
+    ///
+    /// If verbose = true, will print the stringified [AST] after each round of derives.
+    /// Will not print the [AST] before deriving it.
+    pub fn execute_derives(&self, one_step: bool, verbose: bool) -> Result<(Self, bool), String> {
         /* If there are multiple derives, we will only execute the ones
         that do not contain any other derive. (`der(der(x^2) + der(4x))` => `der(2*x + 4)`).
 
@@ -2133,6 +2588,11 @@ impl AST {
                 added_derives = added_derives || node.borrow().is_derive_descendants();
             }
 
+            //printing time!
+            if verbose {
+                println!("\n{}\n", root.borrow().to_string());
+            }
+
             // if we just asked for 1 step or we don't have any derives left, exit
             if one_step || !(abandoned_derives || added_derives) {
                 break abandoned_derives || added_derives;
@@ -2142,10 +2602,6 @@ impl AST {
         let ret: AST = Rc::try_unwrap(root)
             .expect("Failed to unwrap Rc pointer in execute_derives. ")
             .into_inner();
-
-        if false {
-            println!("{}\n", ret.to_string());
-        }
 
         Ok((ret, derives_left))
     }
@@ -2169,6 +2625,7 @@ impl AST {
     }
 
     /// Returns true if self or any descendant are of the variant [Element::Derive].
+    /// Otherwise returns false
     fn is_derive_descendants(&self) -> bool {
         if self.value == Element::Derive {
             return true;
@@ -2186,8 +2643,8 @@ impl AST {
     pub fn full_derive(&self, print_procedure: bool) -> Result<Self, String> {
         // fully derive any current derivation in the tree
 
-        let (new, mut flag): (AST, bool) = self.execute_derives(false)?;
-        assert!(flag == false); // No more missing derives since one_step = true
+        let (new, mut flag): (AST, bool) = self.execute_derives(false, print_procedure)?;
+        assert!(flag == false); // No more missing derives since one_step = false (all steps done)
         if print_procedure {
             println!("AST without derivatives {}\n", self.to_string());
         }
@@ -2200,8 +2657,8 @@ impl AST {
             println!("With derivative: {}\n", self.to_string());
         }
 
-        (derivated, flag) = derivated.execute_derives(true)?;
-        assert!(flag == false); // No more missing derives since one_step = true
+        (derivated, flag) = derivated.execute_derives(false, print_procedure)?;
+        assert!(flag == false); // No more missing derives since one_step = false (all steps done)
         if print_procedure {
             println!("Completely derives: {}\n", self.to_string());
         }
@@ -2226,7 +2683,7 @@ impl Evaluable for AST {
                 );
             }
             Element::Add => {
-                let mut acc: Number = Number::new_rational(0, 1)?;
+                let mut acc: Number = Number::Rational(0, 1);
 
                 for x in &self.children {
                     acc = (*x.borrow_mut()).evaluate(var_value.clone())? + acc
@@ -2240,7 +2697,17 @@ impl Evaluable for AST {
                         //deprecated case
                         match (*self.children[0].borrow_mut()).evaluate(var_value)? {
                             Number::Real(x) => Ok(Number::new_real(-x)),
-                            Number::Rational(n, d) => Ok(Number::new_rational(-n, d)?),
+                            Number::Rational(n, d) => {
+                                let a: Number = match Number::new_rational(-n, d) {
+                                    Ok(v) => v,
+                                    Err(_) => {
+                                        return Err(String::from(
+                                            "Division by 0 is not possible. \n",
+                                        ))
+                                    }
+                                };
+                                Ok(a)
+                            }
                         }
                     }
                     2 => Ok(
@@ -2261,7 +2728,7 @@ impl Evaluable for AST {
                     ));
                 }
 
-                let mut acc: Number = Number::new_rational(1, 1)?;
+                let mut acc: Number = Number::Rational(1, 1);
 
                 for x in &self.children {
                     acc = (*x.borrow_mut()).evaluate(var_value.clone())? * acc;
@@ -2321,14 +2788,14 @@ impl Evaluable for AST {
                 match x {
                     Number::Rational(num, _) => {
                         if num == 0 {
-                            return Ok(Number::new_rational(1, 1)?);
+                            return Ok(Number::Rational(1, 1));
                         }
                         let mut acc: i64 = 1;
                         for i in 1..=num {
                             acc = acc * i;
                         }
 
-                        Ok(Number::new_rational(acc, 1)?)
+                        Ok(Number::Rational(acc, 1))
                     }
                     _ => Err(format!("Impossible case. Real number factorial. \n")),
                 }
@@ -2355,7 +2822,7 @@ impl Evaluable for AST {
                         _ => return Err(String::from("Unreachable statement. ")),
                     };
 
-                    return Ok(Number::new_rational(x_int % y_int, 1)?);
+                    return Ok(Number::Rational(x_int % y_int, 1));
                 }
 
                 let x_numerical: f64 = x.get_numerical();
@@ -2399,9 +2866,10 @@ impl Number {
     }
 
     /// Creates a new rational [Number]. Will fail if den = 0.
-    pub fn new_rational(num: i64, den: u64) -> Result<Self, String> {
+    pub fn new_rational(num: i64, den: u64) -> Result<Self, ()> {
         if den == 0 {
-            return Err(format!("Division by 0 is not possible. \n"));
+            // return Err(format!("Division by 0 is not possible. \n"));
+            return Err(());
         }
         return Ok(Number::Rational(num, den));
     }
@@ -2505,14 +2973,16 @@ impl Number {
         // of a perfect square, it's final digits are "001"
         // However some non-perfets square numbers do pass the test
         // accuracy up to 2**36 = 83.33371480111964%
-        let mut n: i64 = x;
-        while (n & (0b11 as i64)) == 0 {
+
+        // we know its a Natural number so it's ok to cast. Done to work with similar types
+        let mut n: u64 = x as u64;
+        while (n & (0b11 as u64)) == 0 {
             //ends with 00
             n = n >> 2;
             // loop must terminate because input contains at least 1 bit set to 1
         }
 
-        if (n & (0b111 as i64)) != 1 {
+        if (n & (0b111 as u64)) != 1 {
             return false;
         }
 
@@ -2528,22 +2998,22 @@ impl Number {
             let mid: u64 = left + (right - left) / 2;
             let square: u64 = mid * mid;
 
-            match square.cmp(&(n as u64)) {
+            match square.cmp(&n) {
                 std::cmp::Ordering::Equal => return true,
                 std::cmp::Ordering::Less => left = mid + 1,
                 std::cmp::Ordering::Greater => right = mid - 1,
             }
         }
 
-        return false;
+        return false; // No sqrt root found
     }
 
     /// Determinates if the given integer is a perfect squer or not.
     ///
-    /// If it is, returns
-    /// Some() with the square root as an integer. Otherwise returns None.  
-    /// See the implementation of [Number::scan_perfect_square] for the
-    /// details on how it works. This is a readapted version of that code.
+    /// If it is, returns Some() with the square root as an integer.
+    /// Otherwise returns None. See the implementation of
+    /// [Number::scan_perfect_square] for the details on how it works.
+    /// This is a readapted version of that code.
     pub fn is_perfect_square(x: i64) -> Option<i64> {
         //Perfec number info: https://en.wikipedia.org/wiki/Square_number
 
@@ -2553,12 +3023,14 @@ impl Number {
             std::cmp::Ordering::Greater => {}
         }
 
-        let mut n: i64 = x;
-        while (n & (0b11 as i64)) == 0 {
+        let mut n: u64 = x as u64;
+        let mut reduction_steps: u8 = 0;
+        while (n & (0b11 as u64)) == 0 {
             n = n >> 2;
+            reduction_steps += 1;
         }
 
-        if (n & (0b111 as i64)) != 1 {
+        if (n & (0b111 as u64)) != 1 {
             return None;
         }
 
@@ -2571,40 +3043,14 @@ impl Number {
             let mid: u64 = left + (right - left) / 2;
             let square: u64 = mid * mid;
 
-            match square.cmp(&(n as u64)) {
-                std::cmp::Ordering::Equal => return Some(mid as i64),
+            match square.cmp(&n) {
+                std::cmp::Ordering::Equal => return Some((mid as i64) << reduction_steps),
                 std::cmp::Ordering::Less => left = mid + 1,
                 std::cmp::Ordering::Greater => right = mid - 1,
             }
         }
 
         return None;
-
-        /*
-
-        //No square ends with the digit 2, 3, 7, or 8.
-        let remainder: i64 = x % 10;
-
-        match remainder {
-            0 => {}
-            1 => {}
-            4 => {}
-            5 => {}
-            6 => {}
-            9 => {}
-            _ => {
-                return None;
-            }
-        }
-
-        let sqrt: i64 = (x as f64).sqrt().floor() as i64;
-        if sqrt * sqrt == x {
-            return Some(sqrt);
-        }
-
-        return None;
-
-        */
     }
 
     /// Get the numerical value of Self.
@@ -2742,6 +3188,7 @@ impl Number {
         /*Use neg. number or 0 in tolerance to ignore check */
 
         if tolerance <= 0.0 {
+            //exact comparasion
             match (&self, &other) {
                 (Number::Real(x), Number::Real(y)) => return x == y,
                 (Number::Real(r), Number::Rational(num, den)) => {
@@ -2761,29 +3208,131 @@ impl Number {
             }
         }
 
-        match (&self, &other) {
-            (Number::Real(x), Number::Real(y)) => return (x - y).abs() < tolerance,
+        /*
+        Idea:
+        given 0 < tolerance:
+        let tolerande = e
+
+        (self - other).abs() < e
+
+        Implementation will depend on the variants of self and other.
+
+        */
+
+        return match (&self, &other) {
+            (Number::Real(x), Number::Real(y)) => {
+                let ret: bool = (x - y).abs() < tolerance;
+                ret
+            }
             (Number::Real(r), Number::Rational(num, den)) => {
-                return (*r - (*num as f64 / *den as f64)).abs() < tolerance;
+                //let ret: bool = (*r - (*num as f64 / *den as f64)).abs() < tolerance;
+
+                /*
+                abs(a/b - r) < e
+                abs(a/b - r*b/b) < e
+                abs((a - r*b)/b) < e
+                abs(a - r*b)/abs(b) < e
+                abs(a - r*b) < e * abs(b)
+                */
+
+                let f_den: f64 = *den as f64; // float denominator
+                let lhs: f64 = (*num as f64) - (*r) * f_den;
+                let rhs: f64 = tolerance * f_den;
+
+                let ret: bool = lhs.abs() < rhs;
+
+                ret
             }
             (Number::Rational(num, den), Number::Real(r)) => {
-                return (*r - (*num as f64 / *den as f64)).abs() < tolerance;
+                //let ret: bool = (*r - (*num as f64 / *den as f64)).abs() < tolerance;
+
+                /*
+                abs(a/b - r) < e
+                abs(a/b - r*b/b) < e
+                abs((a - r*b)/b) < e
+                abs(a - r*b)/abs(b) < e
+                abs(a - r*b) < e * abs(b)
+                */
+
+                let f_den: f64 = *den as f64; // float denominator
+                let lhs: f64 = (*num as f64) - (*r) * f_den;
+                let rhs: f64 = tolerance * f_den;
+
+                let ret: bool = lhs.abs() < rhs;
+
+                ret
             }
             (Number::Rational(self_num, self_den), Number::Rational(oth_num, oth_den)) => {
                 if self_num == oth_num && self_den == oth_den {
                     return true;
                 }
 
-                return ((*self_num as f64 / *self_den as f64)
+                /*
+                let ret: bool = ((*self_num as f64 / *self_den as f64)
                     - (*oth_num as f64 / *oth_den as f64))
                     .abs()
                     < tolerance;
+                */
+
+                /*
+                abs(a/b - c/d) < e
+                diff = a/b - c/d
+
+                = a*d/b*d - c*b/d*b
+                = (a*d-c*b)/db
+
+                > abs(x/y) = abs(x) * abs(1/y)
+                > abs(x/y) = abs(x) * 1/abs(y)
+                > abs(x/y) = abs(x)/abs(y)
+
+                abs((a*d-c*b)/db) < e
+                abs(a*d-c*b)/abs(db) < e
+                abs(a*d-c*b) < e * abs(db)
+
+                */
+
+                let join_num: f64 =
+                    (*self_num as f64) * (*oth_den as f64) - (*oth_num as f64) * (*self_den as f64);
+                let join_den: f64 = (*self_den as f64) * (*oth_den as f64);
+
+                let ret: bool = join_num.abs() < tolerance * join_den;
+
+                ret
             }
-        }
+        };
     }
 
     /// Returns the number as a string.
+    ///
+    /// If the number happens to be close enough to a constant, returns the
+    /// constant name.
+    ///
+    /// If the number is [Number::Rational] and the numerator and denominator are not
+    /// too big (less than [PRINT_FRACTION_PRECISION_THRESHOLD]), they will be
+    /// returned in the form "a/b". If they are integers they will only be returned
+    /// the integer part normally ("a").
+    ///
+    /// Otherwise, (if the number is [Number::Real] or [Number::Rational] but too big),
+    /// it will return the stringified numerical representation "a.b".
+    /// Only [PRINT_NUMBER_DIGITS] will be returned. Note that the number is truncated,
+    /// not aproximated.
+    ///
+    /// If instead you want the **exact awnser** use [Number::as_numerical_str] instead.
+    /// This is designed to be a simple human-readable stringification.
     pub fn as_str(&self) -> String {
+        /*
+        Idea: If number is a constant, print the related literal.
+
+        If it's a rational, print as a/b if a and b are not too large.
+
+        Otherwise, it's numerical representation will be used and only
+        PRINT_NUMBER_DIGITS decimal places will be displayed.
+        */
+
+        if let Some(const_str) = functions::Constants::is_constant(self) {
+            return const_str.to_string();
+        }
+
         if let Number::Rational(num, den) = self {
             if num.abs() <= PRINT_FRACTION_PRECISION_THRESHOLD as i64
                 && *den < PRINT_FRACTION_PRECISION_THRESHOLD as u64
@@ -2802,7 +3351,7 @@ impl Number {
 
         let mut counter: u32 = 0;
         for (i, c) in full_string.char_indices() {
-            if PRINT_NUMBER_DIGITS < counter {
+            if PRINT_NUMBER_DIGITS <= counter {
                 full_string.truncate(i + 1);
                 return full_string;
             }
@@ -2815,6 +3364,51 @@ impl Number {
         return full_string;
 
         //return format!("{:.PRINT_NUMBER_DIGITS} ", self.get_numerical());
+    }
+
+    /// Returns the number as a string, but with maximum precision
+    /// and the result is guaranteed to be a valid number
+    pub fn as_numerical_str(&self) -> String {
+        match self {
+            Number::Real(r) => format!("{}", r),
+            Number::Rational(n, d) => {
+                if d == &1 {
+                    // is integer
+                    format!("{}", n)
+                } else if d == &0 {
+                    panic!("Attempting to print a invalid rational. (denominator = 0)")
+                } else {
+                    format!("{}/{}", n, d)
+                }
+            }
+        }
+    }
+}
+
+impl PartialEq for Number {
+    fn eq(&self, other: &Number) -> bool {
+        match (self, other) {
+            (Number::Real(r1), Number::Real(r2)) => r1 == r2,
+            (Number::Real(r), Number::Rational(n, d)) => r * *d as f64 == *n as f64,
+            (Number::Rational(n, d), Number::Real(r)) => r * *d as f64 == *n as f64,
+            (Number::Rational(n1, d1), Number::Rational(n2, d2)) => {
+                n1 * *d2 as i64 == n2 * *d1 as i64
+            }
+        }
+    }
+}
+
+impl PartialOrd for Number {
+    fn partial_cmp(&self, other: &Number) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (Number::Real(r1), Number::Real(r2)) => r1.partial_cmp(r2),
+            (Number::Real(r), Number::Rational(n, d)) => (r * *d as f64).partial_cmp(&(*n as f64)),
+            (Number::Rational(n, d), Number::Real(r)) => (r * *d as f64).partial_cmp(&(*n as f64)),
+            (Number::Rational(n1, d1), Number::Rational(n2, d2)) => {
+                //    a/b = c/d     => a * d == c * d
+                Some((n1 * *d2 as i64).cmp(&(n2 * *d1 as i64)))
+            }
+        }
     }
 }
 
@@ -2976,13 +3570,21 @@ impl ops::Mul<Number> for Number {
 
 impl fmt::Debug for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Number::Real(r) => write!(f, "{} ", r),
-            Number::Rational(num, den) => {
-                write!(f, "{}/{} ~= {} ", num, den, *num as f64 / *den as f64)
-            }
-        }
         //f.debug_struct("Number").field("value", &self.value).finish()
+
+        /*
+        match functions::Constants::is_constant(self) {
+            Some(const_str) => write!(f, "{}", const_str),
+            None => match self {
+                Number::Real(r) => write!(f, "{} ", r),
+                Number::Rational(num, den) => {
+                    write!(f, "{}/{} ~= {} ", num, den, *num as f64 / *den as f64)
+                }
+            },
+        }*/
+
+        // Just reuse [Number::as_str]
+        write!(f, "{}", self.as_str())
     }
 }
 
