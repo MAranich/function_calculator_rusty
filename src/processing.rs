@@ -16,7 +16,7 @@ const SEPARATORS: [char; 14] = [
 const DERIVE_KEYWORD_1: &'static str = "der";
 const DERIVE_KEYWORD_2: &'static str = "derive";
 
-pub fn get_ptr<T>(x: T) -> Rc<RefCell<T>>{
+pub fn get_ptr<T>(x: T) -> Rc<RefCell<T>> {
     Rc::new(RefCell::new(x))
 }
 
@@ -26,7 +26,13 @@ pub fn get_ptr<T>(x: T) -> Rc<RefCell<T>>{
 pub fn tokenize_input(idfas: &mut Vec<InstanceDFA>, input: &String) -> Vec<Token> {
     let mut chars: std::str::Chars<'_> = input.chars();
 
-    let mut is_separator: bool = SEPARATORS.binary_search(&chars.nth(0).expect("Input should contain at leas 1 character")).is_ok();
+    let mut is_separator: bool = SEPARATORS
+        .binary_search(
+            &chars
+                .nth(0)
+                .expect("Input should contain at leas 1 character"),
+        )
+        .is_ok();
     let final_c: char = chars.nth(input.chars().count() - 2).unwrap();
 
     let mut token_list: Vec<Token> = vec![];
@@ -586,4 +592,70 @@ pub fn evaluate_expression(
     }
 
     return Ok(final_result);
+}
+
+/// Parses the given number and returns a [Number] if it succeds.
+///
+/// The input string can be in the form `a` or `a/b` where a and b
+/// can be integers or floats. Note that if `b == 0`, an error will
+/// be returned.
+pub fn parse_evaluation_point(input: &String) -> Result<Number, String> {
+    let mut str_number: String = String::new();
+    let mut str_number_denominator: String = String::new();
+
+    let mut found_division: bool = false;
+
+    for c in input.chars() {
+        if c == '/' {
+            found_division = true;
+            continue;
+        }
+
+        if found_division {
+            str_number_denominator.push(c);
+        } else {
+            str_number.push(c);
+        }
+    }
+
+    // We will check iw we can parse them as i64 and if not as f64. If it fails, we panic
+
+    if found_division {
+        // has the form a/b
+
+        if let Ok(numerator) = str_number.parse::<i64>() {
+            if let Ok(denominator) = str_number_denominator.parse::<i64>() {
+                if denominator == 0 {
+                    return Err(String::from("Evaluation point contains division by 0. \n"));
+                }
+
+                return Ok(Number::Rational(numerator, denominator as u64));
+            } else if let Ok(denominator) = str_number_denominator.parse::<f64>() {
+                if denominator == 0.0 {
+                    return Err(String::from("Evaluation point contains division by 0. \n"));
+                }
+                return Ok(Number::Real(numerator as f64 / denominator));
+            }
+        } else if let Ok(numerator) = str_number.parse::<f64>() {
+            if let Ok(denominator) = str_number_denominator.parse::<f64>() {
+                if denominator == 0.0 {
+                    return Err(String::from("Evaluation point contains division by 0. \n"));
+                }
+                return Ok(Number::Real(numerator / denominator));
+            }
+        }
+    } else {
+        // is just a single number
+
+        if let Ok(number) = str_number.parse::<i64>() {
+            return Ok(Number::Rational(number, 1 as u64));
+        } else if let Ok(number) = str_number.parse::<f64>() {
+            return Ok(Number::Real(number));
+        }
+    }
+
+    // at some point both the cast to i64 and f64 failed, so it's not a valid number
+    return Err(String::from(
+        "Invalid number passed as evaluation point. \n",
+    ));
 }

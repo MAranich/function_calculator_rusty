@@ -97,6 +97,8 @@
 //! Physical constants have [IS units](https://en.wikipedia.org/wiki/International_System_of_Units).
 //!
 
+use clap::{command, Arg};
+use core::panic;
 use std::env;
 
 //#[allow(unused_parens)]
@@ -122,24 +124,37 @@ use crate::processing::*;
 use functions::Constants;
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
+    let matched: clap::ArgMatches = command!()
+        .about("This program allows evaluating numerical expressions, evaluating a given function and deriving functions. \n")
+        .arg(
+            Arg::new("expression")
+                .required(true)
+                .help("The expression or function to evaluate or derive. ")
+        )
+        .arg(
+            Arg::new("evaluation_point")
+                .short('e')
+                .long("evaluate")
+                .help("If set, will evaluate the expression at the given point. ")
+        )
+        .get_matches();
 
-    let mut input_vec: Vec<String> = args.clone();
-    input_vec.remove(0);
+    let evaluation_point_str: Option<&String> = matched.get_one::<String>("evaluation_point");
 
-    let mut input: String = if input_vec.len() == 1 && input_vec[0].contains('"') {
-        input_vec[0][1..(input_vec[0].len() - 1)].to_string()
-        //remove quotes and return string
-    } else {
-        input_vec.iter().fold("".to_string(), |acc, x| acc + x)
+    let evaluation_point: Option<Number> = match evaluation_point_str {
+        Some(ev_pt_str) => match parse_evaluation_point(ev_pt_str) {
+            Ok(v) => Some(v),
+            Err(msg) => panic!("{}", msg),
+        },
+        None => None,
     };
 
-    if input.len() == 0 {
-        panic!("\nUse this command with an input. \ncargo run -- \"<your expression>\"");
-    }
+    let input: String = matched
+        .get_one::<String>("expression")
+        .expect("Main argument is needed. ")
+        .to_owned();
 
-    input = input.trim().to_string();
-    println!("\nProcessed input: {:#?}\n", input);
+    // ****************************************************************************
 
     let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
 
@@ -172,6 +187,15 @@ fn main() {
             "\n\tThe derivation of the AST: \n\n{:#?}\n",
             derivated.to_string()
         );
+
+        if let Some(eval_pt) = evaluation_point {
+            let result: Number = match derivated.evaluate(Some(eval_pt)) {
+                Ok(v) => v,
+                Err(msg) => panic!("{}", msg),
+            };
+
+            println!("The function was evaluated to: {}", result.as_str());
+        }
     } else {
         println!(
             "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
@@ -187,11 +211,7 @@ fn main() {
             Err(msg) => panic!("\n{}", msg),
         };
 
-
         println!("AST stringified: \n\n\t{}\n\n", expanded_ders.to_string());
-
-
-        
 
         /*
         let simp_ast: AST = match AST::partial_evaluation(expanded_ders) {
@@ -201,7 +221,7 @@ fn main() {
             },
             Err(msg) => panic!("\n{}", msg),
         };
-        
+
          */
         let simp_ast: AST = match expanded_ders.simplify_expression() {
             Ok(x) => match x.partial_evaluation() {
@@ -211,9 +231,56 @@ fn main() {
             Err(msg) => panic!("\n{}", msg),
         };
 
-        println!("Simplified AST stringified: \n\n\t{}\n\n", simp_ast.to_string());
+        println!(
+            "Simplified AST stringified: \n\n\t{}\n\n",
+            simp_ast.to_string()
+        );
 
-        
+        if let Some(eval_pt) = evaluation_point {
+            let result: Number = match simp_ast.evaluate(Some(eval_pt)) {
+                Ok(v) => v,
+                Err(msg) => panic!("{}", msg),
+            };
 
+            println!("The function was evaluated to: {}\n", result.as_str());
+        }
+
+        print!("\n\n\n"); 
     }
 }
+
+/*
+
+fn main() {
+    let args: Vec<String> = env::args().collect();
+
+    let mut input_vec: Vec<String> = args.clone();
+    input_vec.remove(0); // 0 is name of program
+
+    println!("{:#?}", input_vec);
+    println!("|{}|", input_vec[0]);
+
+    let mut input: String = if input_vec[0].contains('"') {
+        input_vec[0][1..(input_vec[0].len() - 1)].to_string()
+        //remove quotes and return string
+    } else {
+        //panic!("Pass the function argument wrapped in \". For example: \"x^2-ln(4*x + sqrt(PI))\"\n\n");
+        input_vec[0].clone()
+    };
+
+    if input.len() == 0 {
+        panic!("\nUse this command with an input. \ncargo run -- \"<your expression>\"");
+    }
+
+    let evaluation_point: Option<Number> = match input_vec.get(2) {
+        Some(point) => match parse_evaluation_point(point) {
+            Ok(v) => Some(v),
+            Err(msg) => panic!("{}", msg),
+        },
+        None => None,
+    };
+
+    input = input.trim().to_string();
+    println!("\nProcessed input: {:#?}\n", input);
+}
+*/

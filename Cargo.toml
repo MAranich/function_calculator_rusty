@@ -4,6 +4,6 @@ version = "1.0.0"
 edition = "2021"
 
 [dependencies]
-integer-sqrt = "=0.1.5"
 rayon = "1.10"
 rand = "0.8.5"
+clap = { version = "4.5.18", features = ["cargo"] }

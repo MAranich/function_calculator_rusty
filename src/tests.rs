@@ -1,4 +1,3 @@
-use integer_sqrt::IntegerSquareRoot;
 use rand::prelude::*;
 use rayon::prelude::*;
 
@@ -372,54 +371,6 @@ fn is_perfect_square_test() {
      */
 }
 
-#[test]
-#[ignore = "Only used for researching. "]
-fn aproximation_failing_point() {
-    let b: i64 = 1 << 51;
-    // 2^26 = 15.76 s
-    // 2^28 = 1 min
-    // 2^34 =~ 1h
-
-    //  40.87s => 8.70s                 4,6977
-    // 281.63s => 79.20s                3,555
-
-    // ~1h = 3600 s => 1584.21s         ~2
-
-    //for i in 0..i64::MAX {
-    //(0..(1 << 30)).into_iter().for_each(|i|
-    //(0..(1 << 38)).into_par_iter().for_each(|i|
-    (b..(b + (1 << 30))).into_par_iter().for_each(|i| {
-        let obtained_sqrt: i64 = (i as f64).sqrt().floor() as i64;
-        let ground_sqrt: i64 = i.integer_sqrt();
-
-        assert!(
-            obtained_sqrt == ground_sqrt,
-            "Iteration: {}\t {} and {}",
-            i,
-            obtained_sqrt,
-            ground_sqrt
-        );
-    });
-
-    /*
-        ---- tests::aproximation_failing_point stdout ----
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503600164241423      67108868 and 67108867
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503599895805955      67108866 and 67108865
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503599761588224      67108865 and 67108864
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503600432676899      67108870 and 67108869
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503600566894640      67108871 and 67108870
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503600030023688      67108867 and 67108866
-    thread '<unnamed>' panicked at src\tests.rs:132:9:
-    Iteration: 4503600298459160      67108869 and 67108868
-
-         */
-}
 
 #[test]
 #[ignore = "Long"]
