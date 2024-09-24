@@ -205,18 +205,19 @@ fn main() {
         Err(msg) => panic!("\n{}", msg),
     };
 
-    println!(
-        "\n\tThe generated AST: \n\n{:#?}\n",
-        original_ast.to_string()
-    );
+    if verbose_flag {
+        println!(
+            "\n\tThe generated AST: \n\n{:#?}\n",
+            original_ast.to_string()
+        );
+        println!(
+            "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
+            original_ast.contains_variable(),
+            original_ast.contains_derives()
+        );
+    }
 
-    println!(
-        "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
-        original_ast.contains_variable(),
-        original_ast.contains_derives()
-    );
-
-    let expanded_ders: AST = match original_ast.execute_derives(false, true) {
+    let expanded_ders: AST = match original_ast.execute_derives(false, verbose_flag) {
         Ok((v, f)) => {
             assert!(f == false);
             v
@@ -224,7 +225,9 @@ fn main() {
         Err(msg) => panic!("\n{}", msg),
     };
 
-    println!("AST stringified: \n\n\t{}\n\n", expanded_ders.to_string());
+    if verbose_flag {
+        println!("AST stringified: \n\n\t{}\n\n", expanded_ders.to_string());
+    }
 
     let mut ast: AST = if simplify_output_flag {
         match expanded_ders.simplify_expression() {
@@ -247,18 +250,25 @@ fn main() {
         }
     }
 
-    println!("Final AST: \n\n\t{}\n\n", ast.to_string());
+    if verbose_flag {
+        println!("Final AST: \n\n\t{}\n\n", ast.to_string());
+    } else {
+        println!("\n\n{}\n", ast.to_string());
+    }
 
     if let Some(eval_pt) = evaluation_point {
         let result: Number = match ast.evaluate(Some(eval_pt)) {
             Ok(v) => v,
             Err(msg) => panic!("{}", msg),
         };
+        if verbose_flag {
+            println!("The function was evaluated to: {}\n", result.as_str());
+        } else {
+            println!("{}\n", result.as_str());
+        }
+    } 
 
-        println!("The function was evaluated to: {}\n", result.as_str());
-    }
-
-    print!("\n\n\n");
+    print!("\n\n");
 }
 
 /*
