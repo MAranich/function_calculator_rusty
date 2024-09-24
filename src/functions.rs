@@ -496,6 +496,11 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(sign)), Rc::new(RefCell::new(der))],
                 }
             }
+            FN_STR_CEIL | FN_STR_FLOOR => {
+                // we simplify the derivative to 0, 
+                // although it would not be defined at the integers. 
+                crate::datastructures::AST_ZERO.clone()
+            }, 
             _ => {
                 return Err(String::from(
                     "Trying to derive a function that does not exist / unimplemented. \n",

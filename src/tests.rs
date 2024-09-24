@@ -858,10 +858,11 @@ der(11/2 * 8*x * e^x * ln(2*x + 1))
 
 ===================
 
-der(sin(raíz(e^x + pi) / 2))
+der(sin(sqrt(e^x + pi) / 2))
 
 => cos(sqrt(e^x+pi)/2)*((e^x*1*1+0)/(2*sqrt(e^x+pi))*2-0*sqrt(e^x+pi))/2^2
 cos(sqrt(e^x+pi)/2)*(e^x/sqrt(e^x+pi))/4
+cos(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4
 
 der(der(sin(sqrt(e^x + pi) / 2)))
 
