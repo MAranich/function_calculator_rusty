@@ -1,7 +1,11 @@
 use core::fmt;
 use rand::Rng;
 use std::{
-    cell::{Ref, RefCell}, iter::zip, ops, rc::Rc, vec
+    cell::{Ref, RefCell},
+    iter::zip,
+    ops,
+    rc::Rc,
+    vec,
 };
 
 use crate::{
@@ -9,9 +13,9 @@ use crate::{
     get_ptr,
 };
 
-pub static mut NUMERICAL_OUTPUTS: bool = false; 
+pub static mut NUMERICAL_OUTPUTS: bool = false;
 
-//pub static NUMERICAL_OUTPUTS: LazyLock<bool> = LazyLock::new(|| {false}); 
+//pub static NUMERICAL_OUTPUTS: LazyLock<bool> = LazyLock::new(|| {false});
 
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1060,18 +1064,20 @@ impl AST {
     /// 19)     (a^b)^c = a^(b*c)
     /// 20.1)     a * 1/b = a/b    
     /// 20.2)     a * (c/b) = (a*c)/b       (where c is a constant (number))
+    /// 23)     -1*x = -x
     /// Unimplemented:
     /// 12)     sqrt(x^(2*a)) = |x|^a    // a is whole
     /// 18)     x^-a = 1/x^a
     /// 21)     (a-b)*-c = c * (b - a)
     /// 22)     0-x = -x
+    /// 24)     c * -x = (-c)*x
     ///
     ///
     /// Discarded:  
-    /// 9)   0 ^ x = 0                  (if x is neg or 0, it does not work)
+    /// 9)   0 ^ x = 0                  (if x is neg or 0, it does not work; maybe retrun err ???)
     /// 11)  x^a * x^b = x^(a+b)        (done in join_terms)
     ///
-    /// Assumes all numerical subtrees have been evaluated 
+    /// Assumes all numerical subtrees have been evaluated
     /// (parts of the tree that do not depend on the variable (x)).
     /// Otherwise call [AST::partial_evaluation] first.
     pub fn simplify_expression(self) -> Result<Self, String> {
@@ -1112,6 +1118,7 @@ impl AST {
         return Ok(consequent);
     }
 
+    /// Inner function in charge of actually simplifying the given expression.
     fn simplify_step(mut self) -> Result<Self, String> {
         // Debugging tools:
         #[allow(non_snake_case)]
@@ -1317,6 +1324,45 @@ impl AST {
                         break 'mult self;
                     }
                     _ => {}
+                }
+
+                // 23)     -1*x = -x
+
+                self.mult_neg1_to_neg();
+
+
+                if self.children[0].borrow().value == Element::Neg {
+                    let maybe_constant = self.children[1].borrow().value.clone();
+                    if let Element::Number(constant) = maybe_constant {
+                        let new_constant: Number = match constant {
+                            Number::Real(r) => Number::Real(-r),
+                            Number::Rational(n, d) => Number::Rational(-n, d),
+                        };
+
+                        // the expression inside the negation.
+                        let other_expression: Rc<RefCell<AST>> =
+                            Rc::clone(&self.children[0].borrow().children[0]);
+
+                        self.children =
+                            vec![get_ptr(AST::from_number(new_constant)), other_expression];
+                    }
+                } else {
+                    if self.children[1].borrow().value == Element::Neg {
+                        let maybe_constant = self.children[0].borrow().value.clone();
+                        if let Element::Number(constant) = maybe_constant {
+                            let new_constant: Number = match constant {
+                                Number::Real(r) => Number::Real(-r),
+                                Number::Rational(n, d) => Number::Rational(-n, d),
+                            };
+
+                            // the expression inside the negation.
+                            let other_expression: Rc<RefCell<AST>> =
+                                Rc::clone(&self.children[1].borrow().children[0]);
+
+                            self.children =
+                                vec![get_ptr(AST::from_number(new_constant)), other_expression];
+                        }
+                    }
                 }
 
                 self
@@ -2590,8 +2636,8 @@ impl AST {
                 added_derives = added_derives || node.borrow().contains_derives();
             }
 
-            //printing time!
             if verbose {
+                //printing time!
                 println!("\n{}\n", root.borrow().to_string());
             }
 
@@ -2626,7 +2672,11 @@ impl AST {
             .unwrap_or(Vec::new())
     }
 
-    pub fn full_derive(&self, simplify_final_expression: bool, print_procedure: bool) -> Result<Self, String> {
+    pub fn full_derive(
+        &self,
+        simplify_final_expression: bool,
+        print_procedure: bool,
+    ) -> Result<Self, String> {
         // Add a derive and expand
 
         let ast: AST = self.deep_copy().insert_derive();
@@ -2642,9 +2692,10 @@ impl AST {
         }
 
         if simplify_final_expression {
-
-            derivated = derivated.partial_evaluation()?.simplify_expression()?.partial_evaluation()?; 
-
+            derivated = derivated
+                .partial_evaluation()?
+                .simplify_expression()?
+                .partial_evaluation()?;
         }
 
         Ok(derivated)
@@ -3314,11 +3365,11 @@ impl Number {
         */
 
         unsafe {
-            // This is safe because [NUMERICAL_OUTPUTS] may only be changed 
-            // right at the start of the program (before this method is called) 
-            // once depending on the flags. 
+            // This is safe because [NUMERICAL_OUTPUTS] may only be changed
+            // right at the start of the program (before this method is called)
+            // once depending on the flags.
             if NUMERICAL_OUTPUTS {
-                return self.as_numerical_str(); 
+                return self.as_numerical_str();
             }
         }
 

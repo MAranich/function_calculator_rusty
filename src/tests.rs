@@ -869,8 +869,11 @@ der(der(sin(sqrt(e^x + pi) / 2)))
 => -1*sin(sqrt(e^x+pi)/2)*((e^x*1*1+0)/(2*sqrt(e^x+pi))*2-0*sqrt(e^x+pi))/2^2*e^x/sqrt(e^x+pi)/4+((e^x*1*1*sqrt(e^x+pi)-(e^x*1*1+0)/(2*sqrt(e^x+pi))*e^x)/sqrt(e^x+pi)^2*4-0*e^x/sqrt(e^x+pi))/4^2*cos(sqrt(e^x+pi)/2)
 -sin(sqrt(e^x+pi)/2)*e^x/sqrt(e^x+pi)/4*e^x/sqrt(e^x+pi)/4+((e^x*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*e^x)/sqrt(e^x+pi)^2*4)/16*cos(sqrt(e^x+pi)/2)
 
--1*sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(2^2*sqrt(e^x+pi)^2)*2*4/16*cos(sqrt(e^x+pi)/2)
+-sin(s(e^x+pi)/2)*e^x/(2*s(e^x+pi))*2/4*e^x/(2*s(e^x+pi))*2/4+(e^x*2*s(e^x+pi)-e^x/(2*s(e^x+pi))*2*e^x)/(4*s(e^x+pi)^2)*2*4/16*cos(s(e^x+pi)/2)
 
+    der 3: 
+
+(cos(sqrt(e^x+pi)/2)*e^x/(sqrt(e^x+pi))*-e^x/(sqrt(e^x+pi))+(e^x*2*sqrt(e^x+pi)-(e^x)^2/(sqrt(e^x+pi)))/(sqrt(e^x+pi)^2)*2*-sin(sqrt(e^x+pi)/2))*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-1*sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4+((e^x*2*sqrt(e^x+pi)+e^x/(2*sqrt(e^x+pi))*2*e^x-(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*e^x+e^x*e^x/(2*sqrt(e^x+pi))*2)*4*sqrt(e^x+pi)^2-2*sqrt(e^x+pi)*e^x/(2*sqrt(e^x+pi))*4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x))/(16*sqrt(e^x+pi)^4)*2*4*16/256*cos(sqrt(e^x+pi)/2)+-1*sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16
 
 ====================
 
