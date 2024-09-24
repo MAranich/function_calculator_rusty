@@ -1121,6 +1121,15 @@ impl AST {
 
     /// Inner function in charge of actually simplifying the given expression.
     fn simplify_step(mut self) -> Result<Self, String> {
+
+        /*
+        
+        Idea: if the current [AST] has a form that can be simplified according to our rules, do it. 
+        Then apply single step recursively. We will first match into the [Element] of self 
+        and then see if some rule matches for it. 
+
+         */
+
         // Debugging tools:
         #[allow(non_snake_case)]
         let PRINT_DGB_STATEMENTS: bool = false;
@@ -1330,29 +1339,14 @@ impl AST {
                 // 23)     -1*x = -x
 
                 if self.mult_neg1_to_neg() {
-                    // if a change was performed, exit. 
-                    break 'mult self; 
+                    // if a change was performed, exit.
+                    break 'mult self;
                 }
 
-
-                if self.children[0].borrow().value == Element::Neg {
-                    let maybe_constant: Element = self.children[1].borrow().value.clone();
-                    if let Element::Number(constant) = maybe_constant {
-                        let new_constant: Number = match constant {
-                            Number::Real(r) => Number::Real(-r),
-                            Number::Rational(n, d) => Number::Rational(-n, d),
-                        };
-
-                        // the expression inside the negation.
-                        let other_expression: Rc<RefCell<AST>> =
-                            Rc::clone(&self.children[0].borrow().children[0]);
-
-                        self.children =
-                            vec![get_ptr(AST::from_number(new_constant)), other_expression];
-                    }
-                } else {
-                    if self.children[1].borrow().value == Element::Neg {
-                        let maybe_constant = self.children[0].borrow().value.clone();
+                // 24)     c * -x = (-c)*x         // constant mult. by neg. expression => opposite constant * expression
+                {
+                    if self.children[0].borrow().value == Element::Neg {
+                        let maybe_constant: Element = self.children[1].borrow().value.clone();
                         if let Element::Number(constant) = maybe_constant {
                             let new_constant: Number = match constant {
                                 Number::Real(r) => Number::Real(-r),
@@ -1361,15 +1355,30 @@ impl AST {
 
                             // the expression inside the negation.
                             let other_expression: Rc<RefCell<AST>> =
-                                Rc::clone(&self.children[1].borrow().children[0]);
+                                Rc::clone(&self.children[0].borrow().children[0]);
 
                             self.children =
                                 vec![get_ptr(AST::from_number(new_constant)), other_expression];
                         }
+                    } else {
+                        if self.children[1].borrow().value == Element::Neg {
+                            let maybe_constant = self.children[0].borrow().value.clone();
+                            if let Element::Number(constant) = maybe_constant {
+                                let new_constant: Number = match constant {
+                                    Number::Real(r) => Number::Real(-r),
+                                    Number::Rational(n, d) => Number::Rational(-n, d),
+                                };
+
+                                // the expression inside the negation.
+                                let other_expression: Rc<RefCell<AST>> =
+                                    Rc::clone(&self.children[1].borrow().children[0]);
+
+                                self.children =
+                                    vec![get_ptr(AST::from_number(new_constant)), other_expression];
+                            }
+                        }
                     }
                 }
-
-
 
                 self
             }
@@ -1593,22 +1602,21 @@ impl AST {
             Element::Neg => 'neg: {
                 // 14)  -(-x) = x
                 if self.children[0].borrow().value == Element::Neg {
-                    break 'neg self.children[0].borrow().children[0].borrow().deep_copy(); 
-                } 
+                    break 'neg self.children[0].borrow().children[0].borrow().deep_copy();
+                }
 
-
-                let maybe_const: Element = self.children[0].borrow().value.clone(); 
+                let maybe_const: Element = self.children[0].borrow().value.clone();
                 if let Element::Number(constant) = maybe_const {
                     let new_constant: Number = match constant {
                         Number::Real(r) => Number::Real(-r),
                         Number::Rational(n, d) => Number::Rational(-n, d),
                     };
 
-                    self.value = Element::Number(new_constant); 
-                    self.children.clear(); 
+                    self.value = Element::Number(new_constant);
+                    self.children.clear();
                 }
 
-                self 
+                self
             }
             _ => {
                 // No simplification for:
@@ -1625,7 +1633,7 @@ impl AST {
             .map(|child: Rc<RefCell<AST>>| 'clos: {
                 // simplify aritmetically recursively
                 let simplified: Result<AST, String> =
-                    child.borrow().deep_copy().simplify_expression();
+                    child.borrow().deep_copy().simplify_step();
                 break 'clos simplified;
 
                 match simplified {
@@ -1666,7 +1674,7 @@ impl AST {
          (f^a) or f = (f^1) or 1/(f^a) = (f^-a) or 1/f = (f^-1)
 
             FIRST JOIN NUMBERS (easy join)
-        
+
          */
 
         fn matches_sum_form(input: Ref<'_, AST>, other: Ref<'_, AST>) -> Option<Number> {
@@ -1919,9 +1927,9 @@ impl AST {
     /// If the [AST] has the form `-1*f`, where f is any expression,
     /// the multiplication by -1 will be substituted to a negation.
     ///
-    /// If the [AST] does not follow the `-1*f`, nothing will be done. 
-    /// Returns a bool indication if a change was performed. 
-    fn mult_neg1_to_neg(&mut self)  -> bool {
+    /// If the [AST] does not follow the `-1*f`, nothing will be done.
+    /// Returns a bool indication if a change was performed.
+    fn mult_neg1_to_neg(&mut self) -> bool {
         if self.value != Element::Mult {
             return false;
         }
@@ -1932,7 +1940,7 @@ impl AST {
                 let other: Rc<RefCell<AST>> = Rc::clone(&self.children[1]);
                 self.value = Element::Neg;
                 self.children = vec![other];
-                return true; 
+                return true;
             }
         }
 
@@ -1946,7 +1954,7 @@ impl AST {
             }
         }
 
-        return false; 
+        return false;
     }
 
     /// Deep copies the [AST]
