@@ -185,6 +185,12 @@ fn main() {
 
     let simplify_output_flag: bool = matched.get_flag("raw");
 
+    if matched.get_flag("numerical") {
+        unsafe {
+            datastructures::NUMERICAL_OUTPUTS = true;
+        }
+    }
+
     let input: String = matched
         .get_one::<String>("expression")
         .expect("Main argument is needed. ")

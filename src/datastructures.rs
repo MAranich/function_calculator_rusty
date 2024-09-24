@@ -1,17 +1,17 @@
 use core::fmt;
 use rand::Rng;
 use std::{
-    cell::{Ref, RefCell},
-    iter::zip,
-    ops,
-    rc::Rc,
-    vec,
+    cell::{Ref, RefCell}, iter::zip, ops, rc::Rc, vec
 };
 
 use crate::{
     functions::{self, Functions},
     get_ptr,
 };
+
+pub static mut NUMERICAL_OUTPUTS: bool = false; 
+
+//pub static NUMERICAL_OUTPUTS: LazyLock<bool> = LazyLock::new(|| {false}); 
 
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -3312,6 +3312,15 @@ impl Number {
         Otherwise, it's numerical representation will be used and only
         PRINT_NUMBER_DIGITS decimal places will be displayed.
         */
+
+        unsafe {
+            // This is safe because [NUMERICAL_OUTPUTS] may only be changed 
+            // right at the start of the program (before this method is called) 
+            // once depending on the flags. 
+            if NUMERICAL_OUTPUTS {
+                return self.as_numerical_str(); 
+            }
+        }
 
         if let Some(const_str) = functions::Constants::is_constant(self) {
             return const_str.to_string();
