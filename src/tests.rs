@@ -820,6 +820,7 @@ fn rand_quick() {
     panic!()
 }
 
+
 /*
 
 Maybe formalize latter:
@@ -882,6 +883,10 @@ der(der(sin(sqrt(e^x + pi) / 2)))
 
 => x^5/32
 
+/****************** */
 
+3rd derivative of sigmoid fails. 
+
+(exp(x) * (exp(2 * x) - 4 * exp(x) + 1)) / (exp(x) + 1)^4
 
 */

@@ -97,6 +97,7 @@
 //! Physical constants have [IS units](https://en.wikipedia.org/wiki/International_System_of_Units).
 //!
 
+use clap::ArgAction;
 use clap::{command, Arg};
 use core::panic;
 use std::env;
@@ -136,6 +137,29 @@ fn main() {
                 .short('e')
                 .long("evaluate")
                 .help("If set, will evaluate the expression at the given point. ")
+        ).arg(
+            Arg::new("derives")
+                .short('d')
+                .long("derive")
+                .help("Derivates the expression the desired amount of times. Must be a positive number. ")
+        ).arg(
+            Arg::new("raw")
+                .short('r')
+                .long("raw")
+                .help("Do not simplify or rewrite any expression. ")
+                .action(ArgAction::SetTrue)
+        ).arg(
+            Arg::new("numerical")
+                .short('n')
+                .long("numerical")
+                .help("Displays the most exact results possible, without any sort of simplification. ")
+                .action(ArgAction::SetTrue)
+        ).arg(
+            Arg::new("verbose")
+                .short('v')
+                .long("verbose")
+                .help("Displays extra information regarding to the steps to get the awnser, such as each derivation step. ")
+                .action(ArgAction::SetTrue)
         )
         .get_matches();
 
@@ -149,6 +173,14 @@ fn main() {
         None => None,
     };
 
+    let number_of_derives: Option<u16> =
+        matched
+            .get_one::<String>("derives")
+            .map(|n| match n.parse::<u16>() {
+                Ok(v) => v,
+                Err(e) => panic!("{}", e),
+            });
+
     let input: String = matched
         .get_one::<String>("expression")
         .expect("Main argument is needed. ")
@@ -158,12 +190,15 @@ fn main() {
 
     let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
 
-    let ast: AST = match generate_ast(input, &mut calc, true) {
+    let original_ast: AST = match generate_ast(input, &mut calc, true) {
         Ok(ret) => ret,
         Err(msg) => panic!("\n{}", msg),
     };
 
-    println!("\n\tThe generated AST: \n\n{:#?}\n", ast.to_string());
+    println!(
+        "\n\tThe generated AST: \n\n{:#?}\n",
+        original_ast.to_string()
+    );
 
     #[allow(non_snake_case)]
     let WANT_TO_DERIVE: bool = false;
@@ -171,7 +206,7 @@ fn main() {
     let VERBOSE: bool = true;
 
     if WANT_TO_DERIVE {
-        let derivated: AST = match ast.full_derive(VERBOSE) {
+        let derivated: AST = match original_ast.full_derive(true, VERBOSE) {
             Ok(der) => {
                 println!("Unsimplified derivated AST: \n{}", der.to_string());
 
@@ -199,11 +234,11 @@ fn main() {
     } else {
         println!(
             "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
-            ast.contains_variable(),
-            ast.contains_derives()
+            original_ast.contains_variable(),
+            original_ast.contains_derives()
         );
 
-        let expanded_ders: AST = match ast.execute_derives(false, true) {
+        let expanded_ders: AST = match original_ast.execute_derives(false, true) {
             Ok((v, f)) => {
                 assert!(f == false);
                 v
@@ -223,7 +258,7 @@ fn main() {
         };
 
          */
-        let simp_ast: AST = match expanded_ders.simplify_expression() {
+        let mut ast: AST = match expanded_ders.simplify_expression() {
             Ok(x) => match x.partial_evaluation() {
                 Ok(y) => y,
                 Err(msg) => panic!("\n{}", msg),
@@ -231,13 +266,19 @@ fn main() {
             Err(msg) => panic!("\n{}", msg),
         };
 
-        println!(
-            "Simplified AST stringified: \n\n\t{}\n\n",
-            simp_ast.to_string()
-        );
+        if let Some(num_of_derives) = number_of_derives {
+            for _i in 0..num_of_derives {
+                ast = match ast.full_derive(true, VERBOSE) {
+                    Ok(new_ast) => new_ast,
+                    Err(msg) => panic!("{}", msg),
+                }
+            }
+        }
+
+        println!("Final AST: \n\n\t{}\n\n", ast.to_string());
 
         if let Some(eval_pt) = evaluation_point {
-            let result: Number = match simp_ast.evaluate(Some(eval_pt)) {
+            let result: Number = match ast.evaluate(Some(eval_pt)) {
                 Ok(v) => v,
                 Err(msg) => panic!("{}", msg),
             };
@@ -245,7 +286,7 @@ fn main() {
             println!("The function was evaluated to: {}\n", result.as_str());
         }
 
-        print!("\n\n\n"); 
+        print!("\n\n\n");
     }
 }
 

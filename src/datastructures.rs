@@ -1063,6 +1063,8 @@ impl AST {
     /// Unimplemented:
     /// 12)     sqrt(x^(2*a)) = |x|^a    // a is whole
     /// 18)     x^-a = 1/x^a
+    /// 21)     (a-b)*-c = c * (b - a)
+    /// 22)     0-x = -x
     ///
     ///
     /// Discarded:  
@@ -2585,7 +2587,7 @@ impl AST {
                 node.borrow_mut().children = derivative.children;
                 node.borrow_mut().value = derivative.value;
 
-                added_derives = added_derives || node.borrow().is_derive_descendants();
+                added_derives = added_derives || node.borrow().contains_derives();
             }
 
             //printing time!
@@ -2624,23 +2626,7 @@ impl AST {
             .unwrap_or(Vec::new())
     }
 
-    /// Returns true if self or any descendant are of the variant [Element::Derive].
-    /// Otherwise returns false
-    fn is_derive_descendants(&self) -> bool {
-        if self.value == Element::Derive {
-            return true;
-        }
-
-        for child in &self.children {
-            if child.borrow().is_derive_descendants() {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    pub fn full_derive(&self, print_procedure: bool) -> Result<Self, String> {
+    pub fn full_derive(&self, simplify_final_expression: bool, print_procedure: bool) -> Result<Self, String> {
         // fully derive any current derivation in the tree
 
         let (new, mut flag): (AST, bool) = self.execute_derives(false, print_procedure)?;
@@ -2661,6 +2647,12 @@ impl AST {
         assert!(flag == false); // No more missing derives since one_step = false (all steps done)
         if print_procedure {
             println!("Completely derives: {}\n", self.to_string());
+        }
+
+        if simplify_final_expression {
+
+            derivated = derivated.partial_evaluation()?.simplify_expression()?.partial_evaluation()?; 
+
         }
 
         Ok(derivated)
