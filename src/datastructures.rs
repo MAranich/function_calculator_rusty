@@ -2627,23 +2627,15 @@ impl AST {
     }
 
     pub fn full_derive(&self, simplify_final_expression: bool, print_procedure: bool) -> Result<Self, String> {
-        // fully derive any current derivation in the tree
-
-        let (new, mut flag): (AST, bool) = self.execute_derives(false, print_procedure)?;
-        assert!(flag == false); // No more missing derives since one_step = false (all steps done)
-        if print_procedure {
-            println!("AST without derivatives {}\n", self.to_string());
-        }
-
         // Add a derive and expand
 
-        let mut derivated: AST = new.insert_derive();
+        let ast: AST = self.deep_copy().insert_derive();
 
         if print_procedure {
             println!("With derivative: {}\n", self.to_string());
         }
 
-        (derivated, flag) = derivated.execute_derives(false, print_procedure)?;
+        let (mut derivated, flag) = ast.execute_derives(false, print_procedure)?;
         assert!(flag == false); // No more missing derives since one_step = false (all steps done)
         if print_procedure {
             println!("Completely derives: {}\n", self.to_string());

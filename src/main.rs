@@ -126,7 +126,7 @@ use functions::Constants;
 
 fn main() {
     let matched: clap::ArgMatches = command!()
-        .about("This program allows evaluating numerical expressions, evaluating a given function and deriving functions. \n")
+        .about("\n\n\nThis program allows evaluating numerical expressions, evaluating a given function and deriving functions. ")
         .arg(
             Arg::new("expression")
                 .required(true)
@@ -147,7 +147,7 @@ fn main() {
                 .short('r')
                 .long("raw")
                 .help("Do not simplify or rewrite any expression. ")
-                .action(ArgAction::SetTrue)
+                .action(ArgAction::SetFalse)
         ).arg(
             Arg::new("numerical")
                 .short('n')
@@ -181,6 +181,10 @@ fn main() {
                 Err(e) => panic!("{}", e),
             });
 
+    let verbose_flag: bool = matched.get_flag("verbose");
+
+    let simplify_output_flag: bool = matched.get_flag("raw");
+
     let input: String = matched
         .get_one::<String>("expression")
         .expect("Main argument is needed. ")
@@ -190,7 +194,7 @@ fn main() {
 
     let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
 
-    let original_ast: AST = match generate_ast(input, &mut calc, true) {
+    let original_ast: AST = match generate_ast(input, &mut calc, verbose_flag) {
         Ok(ret) => ret,
         Err(msg) => panic!("\n{}", msg),
     };
@@ -200,94 +204,55 @@ fn main() {
         original_ast.to_string()
     );
 
-    #[allow(non_snake_case)]
-    let WANT_TO_DERIVE: bool = false;
-    #[allow(non_snake_case)]
-    let VERBOSE: bool = true;
+    println!(
+        "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
+        original_ast.contains_variable(),
+        original_ast.contains_derives()
+    );
 
-    if WANT_TO_DERIVE {
-        let derivated: AST = match original_ast.full_derive(true, VERBOSE) {
-            Ok(der) => {
-                println!("Unsimplified derivated AST: \n{}", der.to_string());
-
-                match der.partial_evaluation() {
-                    Ok(der_simp) => der_simp,
-                    Err(e) => panic!("\nError while simplifying the derivated input: {}\n", e),
-                }
-            }
-            Err(e) => panic!("\nError while derivating input: {}\n", e),
-        };
-
-        println!(
-            "\n\tThe derivation of the AST: \n\n{:#?}\n",
-            derivated.to_string()
-        );
-
-        if let Some(eval_pt) = evaluation_point {
-            let result: Number = match derivated.evaluate(Some(eval_pt)) {
-                Ok(v) => v,
-                Err(msg) => panic!("{}", msg),
-            };
-
-            println!("The function was evaluated to: {}", result.as_str());
+    let expanded_ders: AST = match original_ast.execute_derives(false, true) {
+        Ok((v, f)) => {
+            assert!(f == false);
+            v
         }
-    } else {
-        println!(
-            "Does the AST contain: \n\tVariables: {}\n\tDerivatives: {}\n",
-            original_ast.contains_variable(),
-            original_ast.contains_derives()
-        );
+        Err(msg) => panic!("\n{}", msg),
+    };
 
-        let expanded_ders: AST = match original_ast.execute_derives(false, true) {
-            Ok((v, f)) => {
-                assert!(f == false);
-                v
-            }
-            Err(msg) => panic!("\n{}", msg),
-        };
+    println!("AST stringified: \n\n\t{}\n\n", expanded_ders.to_string());
 
-        println!("AST stringified: \n\n\t{}\n\n", expanded_ders.to_string());
-
-        /*
-        let simp_ast: AST = match AST::partial_evaluation(expanded_ders) {
-            Ok(x) => match x.simplify_expression() {
-                Ok(y) => y,
-                Err(msg) => panic!("\n{}", msg),
-            },
-            Err(msg) => panic!("\n{}", msg),
-        };
-
-         */
-        let mut ast: AST = match expanded_ders.simplify_expression() {
+    let mut ast: AST = if simplify_output_flag {
+        match expanded_ders.simplify_expression() {
             Ok(x) => match x.partial_evaluation() {
                 Ok(y) => y,
                 Err(msg) => panic!("\n{}", msg),
             },
             Err(msg) => panic!("\n{}", msg),
-        };
+        }
+    } else {
+        expanded_ders
+    };
 
-        if let Some(num_of_derives) = number_of_derives {
-            for _i in 0..num_of_derives {
-                ast = match ast.full_derive(true, VERBOSE) {
-                    Ok(new_ast) => new_ast,
-                    Err(msg) => panic!("{}", msg),
-                }
+    if let Some(num_of_derives) = number_of_derives {
+        for _i in 0..num_of_derives {
+            ast = match ast.full_derive(simplify_output_flag, verbose_flag) {
+                Ok(new_ast) => new_ast,
+                Err(msg) => panic!("{}", msg),
             }
         }
-
-        println!("Final AST: \n\n\t{}\n\n", ast.to_string());
-
-        if let Some(eval_pt) = evaluation_point {
-            let result: Number = match ast.evaluate(Some(eval_pt)) {
-                Ok(v) => v,
-                Err(msg) => panic!("{}", msg),
-            };
-
-            println!("The function was evaluated to: {}\n", result.as_str());
-        }
-
-        print!("\n\n\n");
     }
+
+    println!("Final AST: \n\n\t{}\n\n", ast.to_string());
+
+    if let Some(eval_pt) = evaluation_point {
+        let result: Number = match ast.evaluate(Some(eval_pt)) {
+            Ok(v) => v,
+            Err(msg) => panic!("{}", msg),
+        };
+
+        println!("The function was evaluated to: {}\n", result.as_str());
+    }
+
+    print!("\n\n\n");
 }
 
 /*
