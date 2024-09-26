@@ -13,8 +13,8 @@ const SEPARATORS: [char; 14] = [
     ' ', '!', '%', '(', ')', '*', '+', '-', '/', '[', ']', '^', '{', '}',
 ];
 
-const DERIVE_KEYWORD_1: &'static str = "der";
-const DERIVE_KEYWORD_2: &'static str = "derive";
+pub const DERIVE_KEYWORD_1: &'static str = "der";
+pub const DERIVE_KEYWORD_2: &'static str = "derive";
 
 pub fn get_ptr<T>(x: T) -> Rc<RefCell<T>> {
     Rc::new(RefCell::new(x))
@@ -402,7 +402,7 @@ pub fn negation_substituter(input: Vec<Token>) -> Vec<Token> {
 
 /// Substitute the literal "x" by a [Token] with the variant [TokenClass::Variable].
 pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
-    let mut ret: Vec<Token> = Vec::with_capacity(input.len());
+    //let mut ret: Vec<Token> = Vec::with_capacity(input.len());
     let variable_raw_model: TokenModel = TokenModel {
         token: Token {
             lexeme: Some(String::from("x")),
@@ -419,13 +419,26 @@ pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
         compare_lexemme: true,
     };
 
+    let ret: Vec<Token> = input
+        .into_iter()
+        .map(|tok| {
+            if variable_raw_model.cmp(&tok) {
+                variable_model.get_token()
+            } else {
+                tok
+            }
+        })
+        .collect();
+
+    /*
     for tok in input {
         if variable_raw_model.cmp(&tok) {
             ret.push(variable_model.get_token());
-            continue;
+        } else {
+            ret.push(tok);
         }
-        ret.push(tok);
     }
+     */
 
     return ret;
 }
@@ -434,12 +447,9 @@ pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
 /// to [Element::Derive].
 ///
 pub fn derive_substituter(input: &mut AST) {
-    if let Element::Function(str) = &input.value {
-        match str.to_lowercase().as_str() {
-            DERIVE_KEYWORD_1 | DERIVE_KEYWORD_2 => {
-                input.value = Element::Derive;
-            }
-            _ => {}
+    if let Element::Function(iden) = &input.value {
+        if let crate::functions::FnIdentifier::Derive = iden {
+            input.value = Element::Derive;
         }
     }
 
@@ -510,12 +520,15 @@ pub fn generate_ast(
             }
         }
     }
+    println!("Reduction Done");
 
     // negation tokens:
     token_list = negation_substituter(token_list);
+    println!("Negation Done");
 
     // variable detection
     token_list = variable_substituter(token_list);
+    println!("Variable Done");
 
     // transform to RPN:
     {

@@ -29,6 +29,26 @@ pub const FN_STR_LN: &'static str = "ln";
 pub const FN_STR_ABS: &'static str = "abs";
 pub const FN_STR_FLOOR: &'static str = "floor";
 pub const FN_STR_CEIL: &'static str = "ceil";
+pub const FN_STR_GAMMA: &'static str = "gamma";
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum FnIdentifier {
+    Derive,
+    Inv,
+    Sqrt,
+    Sin,
+    Cos,
+    Tan,
+    Arcsin,
+    Arccos,
+    Arctan,
+    Exp,
+    Ln,
+    Abs,
+    Floor,
+    Ceil,
+    Gamma,
+}
 
 //constants
 pub const CONST_STR_PI: &'static str = "pi";
@@ -72,10 +92,138 @@ impl Functions {
     /// it will retun the corresponding error. It will also return an error if
     /// the function s not found. The function name must be in lowercase and
     /// match exacly with the corresponding name.
-    pub fn find_and_evaluate(function_name: &str, mut input: Number) -> Result<Number, String> {
+    pub fn find_and_evaluate(
+        function_name: FnIdentifier,
+        mut input: Number,
+    ) -> Result<Number, String> {
         input.minimize();
 
-        return match function_name {
+        let ret: Number = match function_name {
+            FnIdentifier::Derive => {
+                return Err(String::from(
+                    "Cannot evaluate a derivative. Expand derivative first and then evaluate. \n",
+                ))
+            }
+            FnIdentifier::Inv => match input {
+                Number::Real(r) => {
+                    if r == 0.0 {
+                        return Err(String::from("Division by 0 is not possible. "));
+                    } else {
+                        Number::Real(1.0 / r)
+                    }
+                }
+                Number::Rational(num, den) => {
+                    if num == 0 {
+                        return Err(String::from("Division by 0 is not possible. "));
+                    } else {
+                        let sign: i64 = num.signum();
+                        Number::Rational((den as i64) * sign, num.abs() as u64)
+                    }
+                }
+            },
+            FnIdentifier::Sqrt => match input {
+                Number::Real(r) => {
+                    if r < 0.0 {
+                        return Err(format!(
+                            "The input of sqrt cannot be negative. Input provided: {}",
+                            r
+                        ));
+                    } else {
+                        Number::new_real(r.sqrt())
+                    }
+                }
+                Number::Rational(num, den) => {
+                    if num < 0 {
+                        return Err(format!(
+                            "The input of sqrt cannot be negative. Input provided: {}",
+                            num as f64 / den as f64
+                        ));
+                    } else {
+                        match (
+                            Number::is_perfect_square(num),
+                            Number::is_perfect_square(den as i64),
+                        ) {
+                            (None, None) => Number::new_real((num as f64 / den as f64).sqrt()),
+                            (None, Some(sqrt_d)) => {
+                                Number::new_real((num as f64).sqrt() / (sqrt_d as f64))
+                            }
+                            (Some(sqrt_n), None) => {
+                                /*
+                                Use rationalitzation for better numerical performance:
+                                x = a*a/b => sqrt(x) = sqrt(a * a)/sqrt(b)
+                                a/sqrt(b) = a * sqrt(b)/sqrt(b) * sqrt(b) = a * sqrt(b) / b
+                                */
+
+                                let f_den: f64 = den as f64;
+                                let rationalized: f64 = (sqrt_n as f64 * f_den.sqrt()) / f_den;
+                                Number::Real(rationalized)
+                            }
+                            (Some(sqrt_n), Some(sqrt_d)) => Number::Rational(sqrt_n, sqrt_d as u64),
+                        }
+                    }
+                }
+            },
+            FnIdentifier::Sin => Number::new_real(input.get_numerical().sin()),
+            FnIdentifier::Cos => Number::new_real(input.get_numerical().cos()),
+            FnIdentifier::Tan => {
+                let x: f64 = input.get_numerical();
+                if (x / PI % 1.0 as f64 - 0.5).abs() < f64::EPSILON * 32.0 {
+                    return Err(String::from("The domain of tan(x) does not include values in the form x = PI*(1/2 + n), where n is an integer. "));
+                }
+                Number::new_real(x.tan())
+            }
+            FnIdentifier::Arcsin => {
+                let x: f64 = input.get_numerical();
+                //Ok(Number::new_real(input.get_numerical().sin())),
+                if !(-1.0 <= x && x <= 1.0) {
+                    // outside domain
+                    return Err("The domain of arcsin() is [-1, 1]. ".to_string());
+                }
+                Number::new_real(x.asin())
+            }
+            FnIdentifier::Arccos => {
+                let x: f64 = input.get_numerical();
+                //Ok(Number::new_real(input.get_numerical().sin())),
+                if !(-1.0 <= x && x <= 1.0) {
+                    // outside domain
+                    return Err("The domain of arccos() is [-1, 1]. ".to_string());
+                }
+                Number::new_real(x.acos())
+            }
+            FnIdentifier::Arctan => Number::new_real(input.get_numerical().atan()),
+            FnIdentifier::Exp => Number::new_real(input.get_numerical().exp()),
+            FnIdentifier::Ln => {
+                let x: f64 = input.get_numerical();
+
+                if x <= 0.0 {
+                    // outside domain
+                    return Err(
+                        "The domain of ln() is the positive reals excluding 0. ".to_string()
+                    );
+                }
+                Number::new_real(x.ln())
+            }
+            FnIdentifier::Abs => match input {
+                Number::Real(r) => Number::new_real(r.abs()),
+                Number::Rational(num, den) => Number::Rational(num.abs(), den),
+            },
+            FnIdentifier::Floor => todo!(),
+            FnIdentifier::Ceil => todo!(),
+            FnIdentifier::Gamma => {
+                let is_int: bool = input.is_integer();
+
+                if is_int && !input.is_positive() {
+                    panic!()
+                }
+
+                todo!()
+            }
+        };
+
+        return Ok(ret);
+
+        /*
+        match function_name {
             FN_STR_SQRT => match input {
                 Number::Real(r) => {
                     if r < 0.0 {
@@ -113,7 +261,9 @@ impl Functions {
                                 let rationalized: f64 = (sqrt_n as f64 * f_den.sqrt()) / f_den;
                                 Ok(Number::Real(rationalized))
                             }
-                            (Some(sqrt_n), Some(sqrt_d)) => Ok(Number::Rational(sqrt_n, sqrt_d as u64)),
+                            (Some(sqrt_n), Some(sqrt_d)) => {
+                                Ok(Number::Rational(sqrt_n, sqrt_d as u64))
+                            }
                         }
                     }
                 }
@@ -176,15 +326,25 @@ impl Functions {
                     Ok(Number::new_real(x.ln()))
                 }
             }
-            FN_STR_ABS => {
-                match input {
-                    Number::Real(r) => Ok(Number::new_real(r.abs())),
-                    Number::Rational(num, den) => Ok(Number::Rational(num.abs(), den)),
+            FN_STR_ABS => match input {
+                Number::Real(r) => Ok(Number::new_real(r.abs())),
+                Number::Rational(num, den) => Ok(Number::Rational(num.abs(), den)),
+            },
+            FN_STR_FLOOR => todo!(),
+            FN_STR_CEIL => todo!(),
+            FN_STR_GAMMA => {
+                let is_int: bool = input.is_integer();
+
+                if is_int && !input.is_positive() {
+                    panic!()
                 }
+
+                todo!()
             }
 
             _ => Err("Function not found. ".to_string()),
         };
+        */
     }
 
     /// Derivate a function
@@ -193,8 +353,8 @@ impl Functions {
     /// with a regognized function. Some parts of the expression may be evaluated, therefore, if the expression
     /// is invalid, the function may return an error.
     pub fn func_derive(input: &AST) -> Result<AST, String> {
-        let function_name: &String = if let Element::Function(iden) = &input.value {
-            iden
+        let function_name: FnIdentifier = if let Element::Function(iden) = &input.value {
+            iden.to_owned()
         } else {
             return Err(format!(
                 "func_derive must be called with functions. It was called with: \n{}",
@@ -210,8 +370,8 @@ impl Functions {
             });
         }
 
-        let ret: AST = match function_name.as_str() {
-            FN_STR_INV => {
+        let ret: AST = match function_name {
+            FnIdentifier::Inv => {
                 // 1/f => -f'/(f^2)
 
                 // f'
@@ -244,7 +404,7 @@ impl Functions {
                     ],
                 }
             }
-            FN_STR_SQRT => {
+            FnIdentifier::Sqrt => {
                 // sqrt(f) = f'/(2*sqrt(f))
 
                 // f'
@@ -265,7 +425,7 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(f2))],
                 }
             }
-            FN_STR_SIN => {
+            FnIdentifier::Sin => {
                 // sin(f) => cos(f)*f'
 
                 // f'
@@ -273,7 +433,7 @@ impl Functions {
 
                 // cos(f)
                 let mut cos: AST = input.deep_copy();
-                cos.value = Element::Function(String::from(FN_STR_COS));
+                cos.value = Element::Function(FnIdentifier::Cos);
 
                 // cos(f)*f'
                 AST {
@@ -281,7 +441,7 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(cos)), Rc::new(RefCell::new(der))],
                 }
             }
-            FN_STR_COS => {
+            FnIdentifier::Cos => {
                 // cos(f) => -sin(f)*f'
 
                 // f'
@@ -289,7 +449,7 @@ impl Functions {
 
                 // sin(f)
                 let mut sin: AST = input.deep_copy();
-                sin.value = Element::Function(String::from(FN_STR_SIN));
+                sin.value = Element::Function(FnIdentifier::Sin);
 
                 // -sin(f)
                 let minus_sin: AST = AST {
@@ -306,7 +466,7 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(minus_sin)), Rc::new(RefCell::new(der))],
                 }
             }
-            FN_STR_TAN => {
+            FnIdentifier::Tan => {
                 // tan(f) => (1 + tan(f)^2) * f'
 
                 // f'
@@ -340,7 +500,7 @@ impl Functions {
                     ],
                 }
             }
-            FN_STR_ASIN => {
+            FnIdentifier::Arcsin => {
                 // arcsin(f) => f'/sqrt(1-f^2)
 
                 // f'
@@ -366,7 +526,7 @@ impl Functions {
 
                 // sqrt(1-f^2)
                 let sqrt_fn: AST = AST {
-                    value: Element::Function(String::from(FN_STR_SQRT)),
+                    value: Element::Function(FnIdentifier::Sqrt),
                     children: vec![Rc::new(RefCell::new(one_minus_f_sq))],
                 };
 
@@ -376,7 +536,7 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(der)), Rc::new(RefCell::new(sqrt_fn))],
                 }
             }
-            FN_STR_ACOS => {
+            FnIdentifier::Arccos => {
                 // arccos(f) => -f'/sqrt(1-f^2)
 
                 // f'
@@ -402,7 +562,7 @@ impl Functions {
 
                 // sqrt(1-f^2)
                 let sqrt_fn: AST = AST {
-                    value: Element::Function(String::from(FN_STR_SQRT)),
+                    value: Element::Function(FnIdentifier::Sqrt),
                     children: vec![Rc::new(RefCell::new(one_minus_f_sq))],
                 };
 
@@ -417,7 +577,7 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(arcsin_der))],
                 }
             }
-            FN_STR_ATAN => {
+            FnIdentifier::Arctan => {
                 // arctan(f) => f'/1+f^2
 
                 // f'
@@ -449,7 +609,7 @@ impl Functions {
                     ],
                 }
             }
-            FN_STR_EXP => {
+            FnIdentifier::Exp => {
                 // exp(f) => exp(f) * f'
 
                 // f'
@@ -464,7 +624,7 @@ impl Functions {
                     ],
                 }
             }
-            FN_STR_LN => {
+            FnIdentifier::Ln => {
                 // ln(f) => f'/f
 
                 // f'
@@ -476,7 +636,7 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(der)), Rc::clone(&input.children[0])],
                 }
             }
-            FN_STR_ABS => {
+            FnIdentifier::Abs => {
                 // |f| =>  f / |f| * f'
 
                 // f'
@@ -496,16 +656,15 @@ impl Functions {
                     children: vec![Rc::new(RefCell::new(sign)), Rc::new(RefCell::new(der))],
                 }
             }
-            FN_STR_CEIL | FN_STR_FLOOR => {
-                // we simplify the derivative to 0, 
-                // although it would not be defined at the integers. 
+            FnIdentifier::Ceil | FnIdentifier::Floor => {
+                // we simplify the derivative to 0,
+                // although it would not be defined at the integers.
                 crate::datastructures::AST_ZERO.clone()
-            }, 
-            _ => {
-                return Err(String::from(
-                    "Trying to derive a function that does not exist / unimplemented. \n",
-                ));
             }
+            FnIdentifier::Gamma => {
+                todo!();
+            }
+            FnIdentifier::Derive => return Err(String::from("Cannot derive a derivative. \n")),
         };
 
         return Ok(ret);
@@ -537,35 +696,59 @@ impl Constants {
 
         for (s, n) in LIST_CONST_VAUE_STR {
             if num.in_tolerance_range(&n, tolerance) {
-                return Some(s); 
+                return Some(s);
             }
         }
 
         None
-
-        /* 
-        if num.in_tolerance_range(&Number::new_real(PI), tolerance) {
-            Some(&CONST_STR_PI)
-        } else if num.in_tolerance_range(&Number::new_real(PI / 180 as f64), tolerance) {
-            Some(&CONST_STR_DEG2RAD)
-        } else if num.in_tolerance_range(&Number::new_real(180 as f64 / PI), tolerance) {
-            Some(&CONST_STR_RAD2DEG)
-        } else if num.in_tolerance_range(
-            &Number::new_real((1.0 as f64 + (5.0 as f64).sqrt()) / 2.0 as f64),
-            tolerance,
-        ) {
-            Some(&CONST_STR_PHI)
-        } else if num.in_tolerance_range(&Number::new_real(E), tolerance) {
-            Some(&CONST_STR_E)
-        } else if num.in_tolerance_range(&Number::new_real(PI * 2 as f64), tolerance) {
-            Some(&CONST_STR_TAU)
-        } else {
-            None
-        }
-
-        */
-
     }
+}
 
+impl FnIdentifier {
+    pub fn from_str(input: &str) -> Result<Self, String> {
+        let ret: FnIdentifier = match input.to_lowercase().as_str() {
+            FN_STR_INV => FnIdentifier::Inv,
+            FN_STR_SQRT => FnIdentifier::Sqrt,
+            FN_STR_SIN => FnIdentifier::Sin,
+            FN_STR_COS => FnIdentifier::Cos,
+            FN_STR_TAN => FnIdentifier::Tan,
+            FN_STR_ASIN => FnIdentifier::Arcsin,
+            FN_STR_ACOS => FnIdentifier::Arccos,
+            FN_STR_ATAN => FnIdentifier::Arctan,
+            FN_STR_EXP => FnIdentifier::Exp,
+            FN_STR_LN => FnIdentifier::Ln,
+            FN_STR_ABS => FnIdentifier::Abs,
+            FN_STR_CEIL => FnIdentifier::Ceil,
+            FN_STR_FLOOR => FnIdentifier::Floor,
+            FN_STR_GAMMA => FnIdentifier::Gamma,
+            crate::processing::DERIVE_KEYWORD_1 | crate::processing::DERIVE_KEYWORD_2 => {
+                FnIdentifier::Derive
+            }
+            _ => return Err(format!("Not a valid function name. Recived: {}\n", input)),
+        };
 
+        return Ok(ret);
+    }
+}
+
+impl ToString for FnIdentifier {
+    fn to_string(&self) -> String {
+        match self {
+            FnIdentifier::Derive => "der".to_string(), 
+            FnIdentifier::Inv => FN_STR_INV.to_string(),
+            FnIdentifier::Sqrt => FN_STR_SQRT.to_string(),
+            FnIdentifier::Sin => FN_STR_SIN.to_string(),
+            FnIdentifier::Cos => FN_STR_COS.to_string(),
+            FnIdentifier::Tan => FN_STR_TAN.to_string(),
+            FnIdentifier::Arcsin => FN_STR_ASIN.to_string(),
+            FnIdentifier::Arccos => FN_STR_ACOS.to_string(),
+            FnIdentifier::Arctan => FN_STR_ATAN.to_string(),
+            FnIdentifier::Exp => FN_STR_EXP.to_string(),
+            FnIdentifier::Ln => FN_STR_LN.to_string(),
+            FnIdentifier::Abs => FN_STR_ABS.to_string(),
+            FnIdentifier::Ceil => FN_STR_CEIL.to_string(),
+            FnIdentifier::Floor => FN_STR_FLOOR.to_string(),
+            FnIdentifier::Gamma => FN_STR_GAMMA.to_string(),
+        }
+    }
 }

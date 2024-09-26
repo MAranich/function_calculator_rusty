@@ -9,7 +9,7 @@ use std::{
 };
 
 use crate::{
-    functions::{self, Functions},
+    functions::{self, FnIdentifier, Functions},
     get_ptr,
 };
 
@@ -91,7 +91,7 @@ pub enum Number {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Element {
     Derive,
-    Function(String),
+    Function(FnIdentifier),
     Add,
     Sub,
     Mult,
@@ -810,7 +810,13 @@ impl SRA {
                 }
             }
             TokenClass::Identifier => {
-                ret = Element::Function(new_tok.lexeme.as_ref().unwrap().clone());
+                let lexemme = new_tok.lexeme.as_ref().unwrap(); 
+                if lexemme == "x" {
+                    ret = Element::Var; 
+                }
+                else {
+                    ret = Element::Function(FnIdentifier::from_str(lexemme)?);
+                }
             }
             TokenClass::SpecialChar => ret = Element::None,
             TokenClass::NTStart => ret = Element::None,
@@ -1121,12 +1127,11 @@ impl AST {
 
     /// Inner function in charge of actually simplifying the given expression.
     fn simplify_step(mut self) -> Result<Self, String> {
-
         /*
-        
-        Idea: if the current [AST] has a form that can be simplified according to our rules, do it. 
-        Then apply single step recursively. We will first match into the [Element] of self 
-        and then see if some rule matches for it. 
+
+        Idea: if the current [AST] has a form that can be simplified according to our rules, do it.
+        Then apply single step recursively. We will first match into the [Element] of self
+        and then see if some rule matches for it.
 
          */
 
@@ -1632,8 +1637,7 @@ impl AST {
             .into_iter()
             .map(|child: Rc<RefCell<AST>>| 'clos: {
                 // simplify aritmetically recursively
-                let simplified: Result<AST, String> =
-                    child.borrow().deep_copy().simplify_step();
+                let simplified: Result<AST, String> = child.borrow().deep_copy().simplify_step();
                 break 'clos simplified;
 
                 match simplified {
@@ -1970,6 +1974,7 @@ impl AST {
             children: childs,
         }
     }
+
     /*
     pub fn deep_copy(&self) -> Self {
         /* //Recursive:
@@ -2026,7 +2031,11 @@ impl AST {
         return match &self.value {
             Element::Derive => format!("der({})", self.children[0].borrow().to_string()),
             Element::Function(identifier) => {
-                format!("{}({})", identifier, self.children[0].borrow().to_string())
+                format!(
+                    "{}({})",
+                    identifier.to_string(),
+                    self.children[0].borrow().to_string()
+                )
             }
             Element::Add => {
                 format!(
@@ -2123,7 +2132,9 @@ impl AST {
                 let child: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child.value.clone() {
                     Element::Derive => child.to_string(),
-                    Element::Function(ident) => format!("{}({})", ident, child.to_string()),
+                    Element::Function(ident) => {
+                        format!("{}({})", ident.to_string(), child.to_string())
+                    }
                     Element::Fact => child.to_string(),
                     Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
@@ -2410,7 +2421,7 @@ impl AST {
 
                         // ln(f)
                         let ln_f: AST = AST {
-                            value: Element::Function(String::from("ln")),
+                            value: Element::Function(FnIdentifier::Ln),
                             children: vec![Rc::new(RefCell::new(
                                 self.children[0].borrow().deep_copy(),
                             ))],
@@ -2514,7 +2525,8 @@ impl AST {
 
                         let mut ln_a_numerical: Number =
                             self.children[0].borrow_mut().evaluate(None)?;
-                        ln_a_numerical = Functions::find_and_evaluate("ln", ln_a_numerical)?;
+                        ln_a_numerical =
+                            Functions::find_and_evaluate(FnIdentifier::Ln, ln_a_numerical)?;
 
                         let ln_a: AST = AST {
                             value: Element::Number(ln_a_numerical),
@@ -2742,7 +2754,7 @@ impl Evaluable for AST {
             }
             Element::Function(name) => {
                 return crate::functions::Functions::find_and_evaluate(
-                    name.as_str(),
+                    name.clone(),
                     (*self.children[0].borrow_mut()).evaluate(var_value)?,
                 );
             }
@@ -2809,7 +2821,7 @@ impl Evaluable for AST {
                 }
 
                 let inverse: Number = crate::functions::Functions::find_and_evaluate(
-                    "inv",
+                    FnIdentifier::Inv,
                     (*self.children[1].borrow_mut()).evaluate(var_value.clone())?,
                 )?;
 

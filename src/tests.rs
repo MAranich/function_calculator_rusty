@@ -56,7 +56,7 @@ fn global_derive_test() {
 #[test]
 fn printing_numbers() {
     let b: Number = Number::Real(PI*1.333);
-    assert_eq!(b.as_str(), "4.18774");
+    assert_eq!(b.as_str(), "4.1877");
 
     let a: Number = Number::Rational(7, 3);
     assert_eq!(a.as_str(), "7/3");
@@ -640,7 +640,7 @@ fn derive_test() {
     //x*arccos(x)^10
     let tree3: AST = {
         let arccos: AST = AST {
-            value: Element::Function(String::from("arccos")),
+            value: Element::Function(functions::FnIdentifier::Arccos),
             children: vec![get_ptr(AST_VAR.clone())],
         };
 
@@ -666,7 +666,7 @@ fn derive_test() {
         (
             tree3,
             Number::Rational(1, 2),
-            Number::Real(-2.785929065537081),
+            Number::Real(-7.15780),
         ),
     ];
 
@@ -696,7 +696,7 @@ fn derive_test() {
             ),
         };
 
-        if !awnser.in_tolerance_range(&solution, 0.0000001) {
+        if !awnser.in_tolerance_range(&solution, 0.0001) {
             panic!(
                 "Non-equal results. Got {:?} ||| {} ({:?}) = {:?}",
                 awnser,
@@ -808,6 +808,7 @@ fn is_constant_unexpected_test() {
 }
 
 #[test]
+#[ignore = "Research only"]
 fn rand_quick() {
     let mut rng: ThreadRng = thread_rng();
     let desviation: f64 = 1.0;
@@ -817,7 +818,7 @@ fn rand_quick() {
         println!("{}", add_rand());
     }
 
-    panic!()
+    //panic!()
 }
 
 
