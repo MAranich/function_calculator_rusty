@@ -520,15 +520,12 @@ pub fn generate_ast(
             }
         }
     }
-    println!("Reduction Done");
 
     // negation tokens:
     token_list = negation_substituter(token_list);
-    println!("Negation Done");
 
     // variable detection
     token_list = variable_substituter(token_list);
-    println!("Variable Done");
 
     // transform to RPN:
     {
