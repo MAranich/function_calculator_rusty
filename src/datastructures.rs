@@ -928,6 +928,16 @@ impl AST {
         true
     }
 
+    /// Adds a function that gets as argument the given function. 
+    /// 
+    /// So if `self = f(x)` and `function = g(x)`, this returns an [AST] 
+    /// representing `g(f(x))`
+    pub fn push_function(self, function: functions::FnIdentifier) -> Self {
+
+        AST { value: Element::Function(function), children: vec![get_ptr(self)] }
+
+    }
+
     /// Sorts the given [AST] in a consistent way
     ///
     /// Rules
@@ -1622,6 +1632,17 @@ impl AST {
                 }
 
                 self
+            }
+            Element::Number(mut num) => {
+                match &num {
+                    Number::Real(r) => match Number::rationalize(*r){
+                        Ok(v) => AST::from_number(v),
+                        Err(_) => AST::from_number(num),
+                    },
+                    Number::Rational(_, _) => {
+                        num.minimize(); 
+                        AST::from_number(num)},
+                }
             }
             _ => {
                 // No simplification for:
@@ -3147,7 +3168,7 @@ impl Number {
             Number::Rational(num, den) => {
                 let sign: i64 = num.signum();
                 *num *= sign;
-                let gcd = Self::euclidean_algorithm(*num as u128, *den as u128) as u64;
+                let gcd: u64 = Self::euclidean_algorithm(*num as u128, *den as u128) as u64;
                 if gcd != 1 {
                     *num = *num / gcd as i64;
                     *den = *den / gcd;

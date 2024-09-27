@@ -55,7 +55,7 @@ fn global_derive_test() {
 
 #[test]
 fn printing_numbers() {
-    let b: Number = Number::Real(PI*1.333);
+    let b: Number = Number::Real(PI * 1.333);
     assert_eq!(b.as_str(), "4.1877");
 
     let a: Number = Number::Rational(7, 3);
@@ -371,7 +371,6 @@ fn is_perfect_square_test() {
      */
 }
 
-
 #[test]
 #[ignore = "Long"]
 fn confusion_matrix_pref_sq() {
@@ -659,15 +658,38 @@ fn derive_test() {
     }
     .insert_derive();
 
+    //ln(tan(x + 6) + 10)
+    let tree4: AST = {
+        let x: AST = AST {
+            value: Element::Var,
+            children: vec![],
+        };
+
+        let t: AST = AST {
+            value: Element::Add,
+            children: vec![
+                get_ptr(x),
+                get_ptr(AST::from_number(Number::Rational(6, 1))),
+            ],
+        }
+        .push_function(functions::FnIdentifier::Tan);
+
+        AST {
+            value: Element::Add,
+            children: vec![
+                get_ptr(t),
+                get_ptr(AST::from_number(Number::Rational(10, 1))),
+            ],
+        }
+        .push_function(functions::FnIdentifier::Ln)
+    }.insert_derive();
+
     // tree, evaluation point, result
     let tree_list: Vec<(AST, Number, Number)> = vec![
         (tree1, Number::Rational(1, 1), Number::Rational(1, 1)),
         (tree2, Number::Rational(1, 1), Number::Rational(6, 1)),
-        (
-            tree3,
-            Number::Rational(1, 2),
-            Number::Real(-7.15780),
-        ),
+        (tree3, Number::Rational(1, 2), Number::Real(-7.15780)),
+        (tree4, Number::Rational(16, 10), Number::Real(1.143492)),
     ];
 
     for (ast, eval_point, solution) in tree_list {
@@ -708,6 +730,46 @@ fn derive_test() {
     }
 
     //panic!();
+
+    /*
+    
+    Other functions that I tested manually and work but I'm too lasy to formalize as a test: 
+    Markew with # the function and then put the result. They are correct unless stated
+    otherwise. 
+
+    # der(x*tan(x))
+
+    tan(x)+(tan(x)^2+1)*x
+
+    # der(x^(arcsin(x)^2))
+
+    x^arcsin(x)^2*(arcsin(x)^2/x+2*arcsin(x)/sqrt(1-x^2)*ln(x))
+
+    # der(8^cos(e^x))
+
+    8^cos(e^x)*2.0794*-sin(e^x)*e^x
+
+    # der(sqrt(x^2 - ln(x)))
+
+    (2*x-1/x)/(2*sqrt(x^2-ln(x)))
+
+    # der(11/2 * 8*x * e^x * ln(2*x + 1))
+
+    (44*e^x+e^x*44*x)*ln(2*x+1)+2*44*x*e^x/(2*x+1)
+
+    # der(sin(sqrt(e^x + pi) / 2))
+
+    cos(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4
+
+    # der(der(sin(sqrt(e^x + pi) / 2)))
+
+    -sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*cos(sqrt(e^x+pi)/2)
+
+    # der(der(der(sin(sqrt(e^x + pi) / 2))))
+    
+    (-cos(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))/2*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-sin(sqrt(e^x+pi)/2))*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4+((e^x*2*sqrt(e^x+pi)+e^x/(2*sqrt(e^x+pi))*2*e^x-(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*e^x+e^x*e^x/(2*sqrt(e^x+pi))*2)*4*sqrt(e^x+pi)^2-2*2*sqrt(e^x+pi)*e^x/(2*sqrt(e^x+pi))*2*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x))/(2*sqrt(e^x+pi))^4*2*4*16/256*cos(sqrt(e^x+pi)/2)+-sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16
+
+     */
 }
 
 #[test]
@@ -756,16 +818,13 @@ fn is_constant_expected_test() {
             panic!()
         }
     }
-
-
 }
 
 #[test]
 fn is_constant_unexpected_test() {
-
     let f: fn(&Number) -> Option<&str> = functions::Constants::is_constant;
 
-    let failable_part: bool = false; 
+    let failable_part: bool = false;
 
     if failable_part {
         // should pass most times (0.6 < )
@@ -780,12 +839,12 @@ fn is_constant_unexpected_test() {
             },
         );
     }
-        
+
     let iters: usize = 1 << 24;
     let _ = (0..iters).into_par_iter().for_each_init(
         || rand::thread_rng(),
         |rand_gen, _i| {
-            let num: f64 = rand_gen.gen::<f64>() * 90.0+10.0;
+            let num: f64 = rand_gen.gen::<f64>() * 90.0 + 10.0;
             if num as i32 != 57 {
                 if let Some(s) = f(&Number::Real(num)) {
                     panic!("Number: {} \t classifed as: {}", num, s);
@@ -804,7 +863,6 @@ fn is_constant_unexpected_test() {
             }
         },
     );
-
 }
 
 #[test]
@@ -821,41 +879,19 @@ fn rand_quick() {
     //panic!()
 }
 
-
 /*
 
 Maybe formalize latter:
 
-der(x*tan(x))
-
-=> 1*tan(x)+(tan(x)^2+1)*1*x
-tan(x)+(tan(x)^2+1)*x
-tan(x) + x/cos(x)^2
-
-====================
-
-der(x^(arcsin(x)^2))
-
-=> x^arcsin(x)^2*(1*arcsin(x)^2/x+2*arcsin(x)^1*1/sqrt(1-x^2)*ln(x))
-x^arcsin(x)^2*(arcsin(x)^2/x+2*arcsin(x)/sqrt(1-x^2)*ln(x))
-x^arcsin(x)^2*(arcsin(x)^2/x+2*arcsin(x)*ln(x)/sqrt(1-x^2))
-
-================
-
 der(8^cos(e^x) + sqrt(x^2 - ln(x)) + 11/2 * 8*x * e^x * ln(2*x + 1))
-der(8^cos(e^x))     => 8^(cos(e^x)*2.0794)*-1*sin(e^x)*e^x*1*1
-
--8^cos(e^x)*ln(8)*sin(e^x)*e^x
-
-correct: -ln(8)*e^x*8^cos(e^x) *sin(e^x)
-
-der(sqrt(x^2 - ln(x))) => (2*x-1/x)/(2*sqrt(x^2-ln(x)))
 
 
 der(11/2 * 8*x * e^x * ln(2*x + 1))
     => ((((0*2-0*11)/2^2*8+0*11/2)*x+1*11/2*8)*e^x+e^x*1*1*11/2*8*x)*ln(2*x+1)+(0*x+1*2+0)/(2*x+1)*11/2*8*x*e^x
     => (((11/2*8)*e^x+e^x*11/2*8*x)*ln(2*x+1)+(1*2)/(2*x+1)*11/2*8*x*e^x
 ^correct
+
+(44*e^x+e^x*44*x)*ln(2*x+1)+2*44*x*e^x/(2*x+1)
 
 ===================
 
@@ -872,7 +908,7 @@ der(der(sin(sqrt(e^x + pi) / 2)))
 
 -sin(s(e^x+pi)/2)*e^x/(2*s(e^x+pi))*2/4*e^x/(2*s(e^x+pi))*2/4+(e^x*2*s(e^x+pi)-e^x/(2*s(e^x+pi))*2*e^x)/(4*s(e^x+pi)^2)*2*4/16*cos(s(e^x+pi)/2)
 
-    der 3: 
+    der 3:
 
 (cos(sqrt(e^x+pi)/2)*e^x/(sqrt(e^x+pi))*-e^x/(sqrt(e^x+pi))+(e^x*2*sqrt(e^x+pi)-(e^x)^2/(sqrt(e^x+pi)))/(sqrt(e^x+pi)^2)*2*-sin(sqrt(e^x+pi)/2))*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-1*sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4+((e^x*2*sqrt(e^x+pi)+e^x/(2*sqrt(e^x+pi))*2*e^x-(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*e^x+e^x*e^x/(2*sqrt(e^x+pi))*2)*4*sqrt(e^x+pi)^2-2*sqrt(e^x+pi)*e^x/(2*sqrt(e^x+pi))*4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x))/(16*sqrt(e^x+pi)^4)*2*4*16/256*cos(sqrt(e^x+pi)/2)+-1*sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16
 
@@ -890,7 +926,7 @@ der(der(sin(sqrt(e^x + pi) / 2)))
 
 /****************** */
 
-3rd derivative of sigmoid fails. 
+3rd derivative of sigmoid fails.
 
 (exp(x) * (exp(2 * x) - 4 * exp(x) + 1)) / (exp(x) + 1)^4
 
