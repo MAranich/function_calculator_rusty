@@ -766,8 +766,43 @@ fn derive_test() {
     -sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*cos(sqrt(e^x+pi)/2)
 
     # der(der(der(sin(sqrt(e^x + pi) / 2))))
-    
-    (-cos(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))/2*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-sin(sqrt(e^x+pi)/2))*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4+((e^x*2*sqrt(e^x+pi)+e^x/(2*sqrt(e^x+pi))*2*e^x-(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*e^x+e^x*e^x/(2*sqrt(e^x+pi))*2)*4*sqrt(e^x+pi)^2-2*2*sqrt(e^x+pi)*e^x/(2*sqrt(e^x+pi))*2*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x))/(2*sqrt(e^x+pi))^4*2*4*16/256*cos(sqrt(e^x+pi)/2)+-sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16
+    [Aparently incorrect, too big to analyze or find the error :/ ]
+    (-cos(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-sin(sqrt(e^x+pi)/2))*e^x/(2*sqrt(e^x+pi))*2/4+(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16*-sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4+((e^x*2*sqrt(e^x+pi)+e^x/(2*sqrt(e^x+pi))*2*e^x-(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*e^x+e^x*e^x/(2*sqrt(e^x+pi))*2)*4*sqrt(e^x+pi)^2-2*2*sqrt(e^x+pi)*e^x/(2*sqrt(e^x+pi))*2*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x))/(2*sqrt(e^x+pi))^4*2*4*16/256*cos(sqrt(e^x+pi)/2)+-sin(sqrt(e^x+pi)/2)*e^x/(2*sqrt(e^x+pi))*2/4*(e^x*2*sqrt(e^x+pi)-e^x/(2*sqrt(e^x+pi))*2*e^x)/(4*sqrt(e^x+pi)^2)*2*4/16
+
+    # der(der(ln(tan(x + 6) + 10)))
+
+    (2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)+10)-(tan(x+6)^2+1)*(tan(x+6)^2+1))/(tan(x+6)+10)^2
+
+    # der(der(der(ln(tan(x + 6) + 10))))    
+    [Unverified, values at 2.5, 4.5, 355/113 are correct. Likely to be correct]
+    ((((tan(x+6)^2+1)*2*(tan(x+6)^2+1)+2*tan(x+6)*(tan(x+6)^2+1)*2*tan(x+6))*(tan(x+6)+10)+(tan(x+6)^2+1)*2*tan(x+6)*(tan(x+6)^2+1)-2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)^2+1)+2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)^2+1))*(tan(x+6)+10)^2-2*(tan(x+6)+10)*(tan(x+6)^2+1)*(2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)+10)-(tan(x+6)^2+1)*(tan(x+6)^2+1)))/(tan(x+6)+10)^4
+
+    # der(exp(sqrt(x^2+1)))
+
+    exp(sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))
+
+    # der(der(exp(sqrt(x^2+1))))
+
+    exp(sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))+(2*2*sqrt(x^2+1)-2*x/(2*sqrt(x^2+1))*2*2*x)/(4*sqrt(x^2+1)^2)*exp(sqrt(x^2+1))
+
+    # der(der(der(exp(sqrt(x^2+1)))))
+    [Unverified. For values: 0.5, 1, 3.35. Likely to be correct. ]
+
+    (exp(sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))+(2*2*sqrt(x^2+1)-2*x/(2*sqrt(x^2+1))*2*2*x)/(4*sqrt(x^2+1)^2)*exp(sqrt(x^2+1)))*2*x/(2*sqrt(x^2+1))+(2*2*sqrt(x^2+1)-2*x/(2*sqrt(x^2+1))*2*2*x)/(4*sqrt(x^2+1)^2)*exp(sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))+((2*x/(2*sqrt(x^2+1))*2*2-(2*2*sqrt(x^2+1)-2*x/(2*sqrt(x^2+1))*2*2*x)/(4*sqrt(x^2+1)^2)*2*2*x+2*2*x/(2*sqrt(x^2+1))*2)*4*sqrt(x^2+1)^2-2*sqrt(x^2+1)*2*x/(2*sqrt(x^2+1))*4*(2*2*sqrt(x^2+1)-2*x/(2*sqrt(x^2+1))*2*2*x))/(16*sqrt(x^2+1)^4)*exp(sqrt(x^2+1))+exp(sqrt(x^2+1))*2*x/(2*sqrt(x^2+1))*(2*2*sqrt(x^2+1)-2*x/(2*sqrt(x^2+1))*2*2*x)/(4*sqrt(x^2+1)^2)
+
+    # der(arcsin(arcsin(x))/x)
+
+    (x/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2))-arcsin(arcsin(x)))/x^2
+
+    # der(der(arcsin(arcsin(x))/x))
+
+    (((sqrt(1-x^2)*sqrt(1-arcsin(x)^2)-((0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))*x)/(sqrt(1-x^2)^2*sqrt(1-arcsin(x)^2)^2)-1/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2)))*x^2-2*x*(x/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2))-arcsin(arcsin(x))))/x^4
+
+    # der(der(der(arcsin(arcsin(x))/x)))
+    [Unverified. For values: 0.25, 0.5, 0.75. Likely to be correct. ]
+    ((((((0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2)-((-2*2*sqrt(1-x^2)-(0-2*x)/(2*sqrt(1-x^2))*2*(0-2*x))/(4*sqrt(1-x^2)^2)*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*(0-2*x)/(2*sqrt(1-x^2))+((0-(2*sqrt(1-x^2)/sqrt(1-x^2)-(0-2*x)/(2*sqrt(1-x^2))*2*arcsin(x))/sqrt(1-x^2)^2)*2*sqrt(1-arcsin(x)^2)-(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*2*(0-2*arcsin(x)/sqrt(1-x^2)))/(4*sqrt(1-arcsin(x)^2)^2)*sqrt(1-x^2)+(0-2*x)/(2*sqrt(1-x^2))*(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2)))*x+(0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))*sqrt(1-x^2)^2*sqrt(1-arcsin(x)^2)^2-(2*sqrt(1-x^2)*(0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)^2+2*sqrt(1-arcsin(x)^2)*(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2)^2)*(sqrt(1-x^2)*sqrt(1-arcsin(x)^2)-((0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))*x))/(sqrt(1-x^2)^4*sqrt(1-arcsin(x)^2)^4)-(0-(0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))/(sqrt(1-x^2)^2*sqrt(1-arcsin(x)^2)^2))*x^2+2*x*((sqrt(1-x^2)*sqrt(1-arcsin(x)^2)-((0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))*x)/(sqrt(1-x^2)^2*sqrt(1-arcsin(x)^2)^2)-1/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2)))-2*(x/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2))-arcsin(arcsin(x)))+((sqrt(1-x^2)*sqrt(1-arcsin(x)^2)-((0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))*x)/(sqrt(1-x^2)^2*sqrt(1-arcsin(x)^2)^2)-1/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2)))*2*x)*x^4-4*x^3*(((sqrt(1-x^2)*sqrt(1-arcsin(x)^2)-((0-2*x)/(2*sqrt(1-x^2))*sqrt(1-arcsin(x)^2)+(0-2*arcsin(x)/sqrt(1-x^2))/(2*sqrt(1-arcsin(x)^2))*sqrt(1-x^2))*x)/(sqrt(1-x^2)^2*sqrt(1-arcsin(x)^2)^2)-1/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2)))*x^2-2*x*(x/(sqrt(1-x^2)*sqrt(1-arcsin(x)^2))-arcsin(arcsin(x)))))/x^8
+
+
 
      */
 }
