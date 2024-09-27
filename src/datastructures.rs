@@ -3477,7 +3477,27 @@ impl PartialEq for Number {
             (Number::Real(r), Number::Rational(n, d)) => r * *d as f64 == *n as f64,
             (Number::Rational(n, d), Number::Real(r)) => r * *d as f64 == *n as f64,
             (Number::Rational(n1, d1), Number::Rational(n2, d2)) => {
-                n1 * *d2 as i64 == n2 * *d1 as i64
+
+                // n1 * *d2 as i64 == n2 * *d1 as i64
+                
+
+                let mult_1: Option<i64> = n1.checked_mul(*d2 as i64); 
+                let mult_2: Option<i64> = n2.checked_mul(*d1 as i64); 
+
+                match (mult_1, mult_2) {
+                    (Some(a), Some(b)) => {
+                        a == b
+                    }
+                    _ => {
+                        let a: u128 = *n1 as u128; 
+                        let b: u128 = *d2 as u128; 
+                        let c: u128 = *n2 as u128; 
+                        let d: u128 = *d1 as u128; 
+
+                        a*b == c*d
+                    }
+                }
+
             }
         }
     }
@@ -3491,7 +3511,24 @@ impl PartialOrd for Number {
             (Number::Rational(n, d), Number::Real(r)) => (r * *d as f64).partial_cmp(&(*n as f64)),
             (Number::Rational(n1, d1), Number::Rational(n2, d2)) => {
                 //    a/b = c/d     => a * d == c * d
-                Some((n1 * *d2 as i64).cmp(&(n2 * *d1 as i64)))
+
+                //Some((n1 * *d2 as i64).cmp(&(n2 * *d1 as i64)))
+
+                let mult_1: Option<i64> = n1.checked_mul(*d2 as i64); 
+                let mult_2: Option<i64> = n2.checked_mul(*d1 as i64); 
+                match (mult_1, mult_2) {
+                    (Some(a), Some(b)) => Some(a.cmp(&b)), 
+                    _ => {
+                        let a: i128 = *n1 as i128; 
+                        let b: i128 = *d2 as i128; 
+                        let c: i128 = *n2 as i128; 
+                        let d: i128 = *d1 as i128; 
+
+                        Some((a * b).cmp(&(c * d)))
+
+                    }
+                }
+
             }
         }
     }
@@ -3530,7 +3567,8 @@ impl ops::Add<Number> for Number {
                         return Number::new_real(left_number + right_number);
                     }
 
-                    let lcm: u64 = lcm_res.unwrap();
+                    // Least Common Multiple
+                    let lcm: u64 = lcm_res.unwrap(); 
 
                     let mult_factor_left: i64 = lcm as i64 / left_den as i64;
                     let mult_factor_right: i64 = lcm as i64 / right_den as i64;
@@ -3539,7 +3577,7 @@ impl ops::Add<Number> for Number {
                     let den: u64 = lcm;
 
                     let mut new_rational: Number =
-                        Number::new_rational(num, den).expect("Non zero div rational");
+                        Number::new_rational(num, den).expect("Attempting to add 2 Rationals and 1 of them has 0 as divisor. ");
                     new_rational.minimize();
 
                     return new_rational;
@@ -3593,7 +3631,7 @@ impl ops::Sub<Number> for Number {
                     let den: u64 = lcm;
 
                     let mut new_rational: Number =
-                        Number::new_rational(num, den).expect("Non zero div rational");
+                        Number::new_rational(num, den).expect("Attempting to substract 2 Rationals and 1 of them has 0 as divisor. ");
                     new_rational.minimize();
 
                     return new_rational;
@@ -3640,7 +3678,7 @@ impl ops::Mul<Number> for Number {
                             Number::new_real(num as f64 / den)
                         }
                         (Some(num), Some(den)) => {
-                            Number::new_rational(num, den).expect("Non zero div rational")
+                            Number::new_rational(num, den).expect("Attempting to multiply 2 Rationals and 1 of them has 0 as divisor. ")
                         }
                     };
 
@@ -3656,17 +3694,6 @@ impl ops::Mul<Number> for Number {
 impl fmt::Debug for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         //f.debug_struct("Number").field("value", &self.value).finish()
-
-        /*
-        match functions::Constants::is_constant(self) {
-            Some(const_str) => write!(f, "{}", const_str),
-            None => match self {
-                Number::Real(r) => write!(f, "{} ", r),
-                Number::Rational(num, den) => {
-                    write!(f, "{}/{} ~= {} ", num, den, *num as f64 / *den as f64)
-                }
-            },
-        }*/
 
         // Just reuse [Number::as_str]
         write!(f, "{}", self.as_str())

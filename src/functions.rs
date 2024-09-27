@@ -352,6 +352,8 @@ impl Functions {
 
                 then exponentiate. Done in this way for numerical stability. 
                 Precision seems to increase as x grows. 
+
+                todo: pass to ramanujan aprox. for precision?
                  */
 
                 
