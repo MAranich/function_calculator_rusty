@@ -3405,13 +3405,15 @@ impl Number {
         PRINT_NUMBER_DIGITS decimal places will be displayed.
         */
 
-        unsafe {
+        let numerical_output_read: bool = unsafe {
             // This is safe because [NUMERICAL_OUTPUTS] may only be changed
             // right at the start of the program (before this method is called)
             // once depending on the flags.
-            if NUMERICAL_OUTPUTS {
-                return self.as_numerical_str();
-            }
+            NUMERICAL_OUTPUTS
+        }; 
+            
+        if numerical_output_read {
+            return self.as_numerical_str();
         }
 
         if let Some(const_str) = functions::Constants::is_constant(self) {

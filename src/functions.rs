@@ -7,7 +7,7 @@ use std::{
     rc::Rc,
 };
 
-use crate::{datastructures::Number, Element, AST};
+use crate::{datastructures::Number, Element, AST, AST_ONE};
 
 /*
 sum:                x + y
@@ -28,10 +28,13 @@ pub const FN_STR_ACOS: &'static str = "arccos";
 pub const FN_STR_ATAN: &'static str = "arctan";
 pub const FN_STR_EXP: &'static str = "exp";
 pub const FN_STR_LN: &'static str = "ln";
+pub const FN_STR_GAMMA: &'static str = "gamma";
 pub const FN_STR_ABS: &'static str = "abs";
 pub const FN_STR_FLOOR: &'static str = "floor";
 pub const FN_STR_CEIL: &'static str = "ceil";
-pub const FN_STR_GAMMA: &'static str = "gamma";
+pub const FN_STR_REAL: &'static str = "real";
+pub const FN_STR_RATIONAL: &'static str = "rational";
+pub const FN_STR_RATIONAL_2: &'static str = "rat";
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum FnIdentifier {
@@ -49,6 +52,8 @@ pub enum FnIdentifier {
     Abs,
     Floor,
     Ceil,
+    Real, 
+    Rational, 
     Gamma,
 }
 
@@ -273,6 +278,25 @@ impl Functions {
                     }
                 }
             }
+            FnIdentifier::Real => {
+                // Cast the number to a real representation. 
+
+                Number::Real(input.get_numerical())
+
+            }, 
+            FnIdentifier::Rational => {
+                // Cast the number to the most accurate rational representation. 
+
+                match input {
+                    Number::Rational(_, _) => input,
+                    Number::Real(r) => {
+                        match Number::rationalize(r) {
+                            Ok(v) => v,
+                            Err(v) => v,
+                        }
+                    },
+                }
+            }, 
             FnIdentifier::Gamma => 'gamma: {
                 /*
                     For the computation:
@@ -348,13 +372,15 @@ impl Functions {
                 }
 
                 /*
-                ln(gamma(x)) = 1/2 * (ln(2*pi) - ln(x)) + x * (ln(x+1/(12*x - 1/(10*x)))-1)
+                 ln(gamma(x)) = 1/2 * (ln(2*pi) - ln(x)) + x * (ln(x+1/(12*x - 1/(10*x)))-1)
 
-                then exponentiate. Done in this way for numerical stability. 
-                Precision seems to increase as x grows. 
+                 then exponentiate. Done in this way for numerical stability. 
+                 Precision seems to increase as x grows. (Did I read that this 
+                 is acurate with an O(1/n) error somewhere (???))
 
-                todo: pass to ramanujan aprox. for precision?
-                 */
+                 todo: pass to ramanujan aprox. for precision ?
+                
+                */
 
                 
                 
@@ -828,6 +854,10 @@ impl Functions {
                 // although it would not be defined at the integers.
                 crate::datastructures::AST_ZERO.clone()
             }
+            FnIdentifier::Real | FnIdentifier::Rational => {
+                // this is only a cast between Number types, so the derivative is the identity. 
+                AST_ONE.clone()
+            }
             FnIdentifier::Gamma => {
                 todo!();
             }
@@ -892,6 +922,8 @@ impl FnIdentifier {
             FN_STR_CEIL => FnIdentifier::Ceil,
             FN_STR_FLOOR => FnIdentifier::Floor,
             FN_STR_GAMMA => FnIdentifier::Gamma,
+            FN_STR_REAL => FnIdentifier::Real, 
+            FN_STR_RATIONAL | FN_STR_RATIONAL_2 => FnIdentifier::Rational, 
             crate::processing::DERIVE_KEYWORD_1 | crate::processing::DERIVE_KEYWORD_2 => {
                 FnIdentifier::Derive
             }
@@ -920,6 +952,8 @@ impl ToString for FnIdentifier {
             FnIdentifier::Abs => FN_STR_ABS.to_string(),
             FnIdentifier::Ceil => FN_STR_CEIL.to_string(),
             FnIdentifier::Floor => FN_STR_FLOOR.to_string(),
+            FnIdentifier::Real => FN_STR_REAL.to_string(), 
+            FnIdentifier::Rational => FN_STR_RATIONAL.to_string(), 
             FnIdentifier::Gamma => FN_STR_GAMMA.to_string(),
         }
     }
