@@ -7,6 +7,8 @@ use std::{
     rc::Rc,
 };
 
+use rand::Rng;
+
 use crate::{datastructures::Number, Element, AST, AST_ONE};
 
 /*
@@ -35,6 +37,9 @@ pub const FN_STR_CEIL: &'static str = "ceil";
 pub const FN_STR_REAL: &'static str = "real";
 pub const FN_STR_RATIONAL: &'static str = "rational";
 pub const FN_STR_RATIONAL_2: &'static str = "rat";
+pub const FN_STR_RANDOM: &'static str = "rand";
+pub const FN_STR_RANDOM_2: &'static str = "random";
+pub const FN_STR_RANDOM_3: &'static str = "rnd";
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum FnIdentifier {
@@ -52,6 +57,7 @@ pub enum FnIdentifier {
     Abs,
     Floor,
     Ceil,
+    Random, 
     Real, 
     Rational, 
     Gamma,
@@ -277,6 +283,15 @@ impl Functions {
                         }
                     }
                 }
+            }
+            FnIdentifier::Random => {
+                // Returns a random uniformley distributed random number in [0, 1]
+                // ^not sure if 0 and 1 are included
+
+            let mut rand_gen: rand::prelude::ThreadRng = rand::thread_rng(); 
+
+            Number::Real(rand_gen.gen::<f64>())
+
             }
             FnIdentifier::Real => {
                 // Cast the number to a real representation. 
@@ -861,6 +876,7 @@ impl Functions {
             FnIdentifier::Gamma => {
                 todo!();
             }
+            FnIdentifier::Random => return Err(String::from("Random function has no derivative. ")), 
             FnIdentifier::Derive => return Err(String::from("Cannot derive a derivative. \n")),
         };
 
@@ -924,6 +940,7 @@ impl FnIdentifier {
             FN_STR_GAMMA => FnIdentifier::Gamma,
             FN_STR_REAL => FnIdentifier::Real, 
             FN_STR_RATIONAL | FN_STR_RATIONAL_2 => FnIdentifier::Rational, 
+            FN_STR_RANDOM | FN_STR_RANDOM_2 | FN_STR_RANDOM_3 => FnIdentifier::Random, 
             crate::processing::DERIVE_KEYWORD_1 | crate::processing::DERIVE_KEYWORD_2 => {
                 FnIdentifier::Derive
             }
@@ -952,6 +969,7 @@ impl ToString for FnIdentifier {
             FnIdentifier::Abs => FN_STR_ABS.to_string(),
             FnIdentifier::Ceil => FN_STR_CEIL.to_string(),
             FnIdentifier::Floor => FN_STR_FLOOR.to_string(),
+            FnIdentifier::Random => FN_STR_RANDOM.to_string(), 
             FnIdentifier::Real => FN_STR_REAL.to_string(), 
             FnIdentifier::Rational => FN_STR_RATIONAL.to_string(), 
             FnIdentifier::Gamma => FN_STR_GAMMA.to_string(),
