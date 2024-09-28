@@ -2617,7 +2617,7 @@ impl AST {
                    if g(x) is constant then g'(x) = 0 and h'(x) = f'(x).
                    Otherwise: (simplifiying derivative of floor(x) to 0)
 
-                   h'(x) = f'(x) - (floor'(f(x)/g(x))*(f(x)/g(x))'*g(x) + g'(x) * floor(f(x)/g(x)))
+                   h'(x) = f'(x) - (floor(f(x)/g(x))*(f(x)/g(x))'*g(x) + g'(x) * floor(f(x)/g(x)))
                    h'(x) = f'(x) - 0*(f(x)/g(x))'*g(x) - g'(x) * floor(f(x)/g(x))
                    h'(x) = f'(x) - g'(x) * floor(f(x)/g(x))
 

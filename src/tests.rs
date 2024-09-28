@@ -682,7 +682,8 @@ fn derive_test() {
             ],
         }
         .push_function(functions::FnIdentifier::Ln)
-    }.insert_derive();
+    }
+    .insert_derive();
 
     // tree, evaluation point, result
     let tree_list: Vec<(AST, Number, Number)> = vec![
@@ -732,10 +733,10 @@ fn derive_test() {
     //panic!();
 
     /*
-    
-    Other functions that I tested manually and work but I'm too lasy to formalize as a test: 
+
+    Other functions that I tested manually and work but I'm too lasy to formalize as a test:
     Markew with # the function and then put the result. They are correct unless stated
-    otherwise. 
+    otherwise.
 
     # der(x*tan(x))
 
@@ -773,7 +774,7 @@ fn derive_test() {
 
     (2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)+10)-(tan(x+6)^2+1)*(tan(x+6)^2+1))/(tan(x+6)+10)^2
 
-    # der(der(der(ln(tan(x + 6) + 10))))    
+    # der(der(der(ln(tan(x + 6) + 10))))
     [Unverified, values at 2.5, 4.5, 355/113 are correct. Likely to be correct]
     ((((tan(x+6)^2+1)*2*(tan(x+6)^2+1)+2*tan(x+6)*(tan(x+6)^2+1)*2*tan(x+6))*(tan(x+6)+10)+(tan(x+6)^2+1)*2*tan(x+6)*(tan(x+6)^2+1)-2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)^2+1)+2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)^2+1))*(tan(x+6)+10)^2-2*(tan(x+6)+10)*(tan(x+6)^2+1)*(2*tan(x+6)*(tan(x+6)^2+1)*(tan(x+6)+10)-(tan(x+6)^2+1)*(tan(x+6)^2+1)))/(tan(x+6)+10)^4
 

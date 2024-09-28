@@ -1,29 +1,9 @@
-//! This project allows the numerical evaluation of string expressions.
-//!
-//! ## Basic usage and example
-//!
-//! The following code gives a bery basic example of the usage:
-//! ```
-//! let input: String = String::from("4 -2+sqrt(sin(PI/2))**ln(1) + 1/cos(tan(exp(-2.2)))");
-//! let mut calc: Calculator = Calculator::new(setup::setup_dfas(), SRA::new(setup::get_rules()));
-//!
-//! match evaluate_expression(input, &mut calc, false) {
-//!     Ok(final_value) => {
-//!         println!("\nEvaluated to: \t{:?}\n", final_result);
-//!     }
-//!     Err(msg) => panic!("\n{}", msg),
-//! }
-//! ```
-//! After executing, it prints the following:
-//! > Evaluated to:   4.0062213501365935
-//!
-//! However, the program will also try to work with fractions when possible.
-//! If we let input `"1/2 + 5/9"`, the printed message will be:
-//! > Evaluated to:   19/18 ~= 1.0555555555555556
-//!
-//! The project can be run with `cargo run -- "<expression>"`, where `<expression>` is
-//! your desired input.  
-//!
+//! This program allows evaluating numerical expressions, evaluating a given 
+//! function and deriving functions. You can create expressions using basic 
+//! mathematical operations and evaluate and compute it's derivatives. 
+//! 
+//! Use the character `x` as the variable to create functions. 
+//! 
 //! ***
 //! ## Operations and syntax:
 //!
@@ -36,16 +16,20 @@
 //! 5) Modulus                          (using `%`, as in `"19%10"`)
 //! 6) Exponentiation                   (using `^` or `**` as in `"2^10"` or `"2**10"`)
 //! 7) Factorial                        (using `!`, as in `"6!"`)
-//! 8) Square root                      (using `sqrt(x)`, as in `"sqrt(3)"`)
-//! 9) Sinus                            (using `sin(x)`, as in `"sin(PI)"`)
-//! 10) Cosinus                         (using `cos(x)`, as in `"cos(PI)"`)
-//! 11) Tangent                         (using `tan(x)`, as in `"tan(PI)"`)
-//! 12) Arcsinus (inverse sinus)        (using `arcsin(x)`, as in `"arcsin(0)"`)
-//! 13) Arccosinus (inverse cosinus)    (using `arccos(x)`, as in `"arccos(0)"`)
-//! 14) Arctangent (inverse tangent)    (using `arctan(x)`, as in `"arctan(0)"`)
-//! 15) Exponential                     (using `exp(x)`, as in `"exp(3)"`)
-//! 16) Natural logarithm               (using `ln(x)`, as in `"ln(e)"`)
-//! 17) Absolute value                  (using `abs(x)`, as in `"abs(-1)"`)
+//! 8) Square root                      (using `sqrt(x)`)
+//! 9) Sinus                            (using `sin(x)`)
+//! 10) Cosinus                         (using `cos(x)`)
+//! 11) Tangent                         (using `tan(x)`)
+//! 12) Arcsinus (inverse sinus)        (using `arcsin(x)`)
+//! 13) Arccosinus (inverse cosinus)    (using `arccos(x)`)
+//! 14) Arctangent (inverse tangent)    (using `arctan(x)`)
+//! 15) Exponential                     (using `exp(x)`)
+//! 16) Natural logarithm               (using `ln(x)`)
+//! 17) Absolute value                  (using `abs(x)`)
+//! 18) Floor function                  (using `floor(x)`)
+//! 19) Ceil function                   (using `ceil(x)`)
+//! 20) Random  (Uniform [0, 1])        (using `rand(x)`)
+//! 21) Gamma                           (using `gamma(x)`)
 //!
 //! + All the functions can be combined and composed in any way as long as they are
 //! mathematically correct and fullfill the syntax requirments.
@@ -63,9 +47,8 @@
 //!
 //! + Division by 0 is not allowed.
 //!
-//! + Every parenthesis (any of `()`, `{}` and `[]` can also be used. They are
-//! equivalent but have to match) must be closed. Therefore each parenthesys
-//! symbol must have its correspondinc counterpart.
+//! + Every parenthesis must be closed. Any of `()`, `{}` and `[]` can be used. 
+//! They are equivalent but must to match it's counterpart.
 //!
 //! + Spaces are ignored, you can add all you want or even remove them completly.
 //!
@@ -124,6 +107,44 @@ use crate::datastructures::*;
 use crate::processing::*;
 use functions::Constants;
 
+const DESCRIPTION: &'static str = "
+ - Every parenthesis must be closed. Any of `()`, `{}` and `[]` can be used. They are equivalent but must to match it's counterpart. 
+
+ - Spaces are ignored, you can add all you want or even remove them completly. 
+
+ - Remember that a [logarithm](https://en.wikipedia.org/wiki/Logarithm#Change_of_base) in any base `b` can be expressed as `log_b(x) = (ln(x)/ln(b))` .
+
+\tVaid operations: 
+Addition (`+`)
+Substraction (`-`)
+Multiplication (`*`)
+Division (`/`)
+Modulus (`%`)
+Exponentiation (`^` or `**`)
+Factorial (`!`)
+Square root (`sqrt(x)`)
+Sinus (`sin(x)`)
+Cosinus (`cos(x)`)
+Tangent  (`tan(x)`)
+Arcsinus (`arcsin(x)`)
+Arccosinus (`arccos(x)`)
+Arctangent (`arctan(x)`)
+Exponential (`exp(x)`, recommended over `e^x`)
+Natural logarithm (`ln(x)`)
+Absolute value (`abs(x)`)
+Floor function (`floor(x)`)
+Ceil function (`ceil(x)`)
+Random  (Uniform [0, 1]) (`rand(x)`)
+Gamma (`gamma(x)`)
+
+ - All the functions can be combined and composed in any way as long as they are mathematically correct and fullfill the syntax requirments.
+
+ - Use `der(x)` to calculate the derivative of the inside. 
+
+
+
+"; 
+
 fn main() {
     let matched: clap::ArgMatches = command!()
         .about("\n\n\nThis program allows evaluating numerical expressions, evaluating a given function and deriving functions. ")
@@ -131,8 +152,7 @@ fn main() {
             Arg::new("expression")
                 .required(true)
                 .help("The expression or function to evaluate or derive. ")
-        )
-        .arg(
+        ).arg(
             Arg::new("evaluation_point")
                 .short('e')
                 .long("evaluate")
@@ -160,9 +180,40 @@ fn main() {
                 .long("verbose")
                 .help("Displays extra information regarding to the steps to get the awnser, such as each derivation step. ")
                 .action(ArgAction::SetTrue)
-        )
+        ).after_help(DESCRIPTION)
+        
         .get_matches();
+/*
+Addition (`-`)
+Substraction (`-`)
+Multiplication (`*`)\
+Division (`/`)
+Modulus (`%`)
+Exponentiation (`^` or `**`)
+Factorial (`!`)
+Square root (`sqrt(x)`)
+Sinus (`sin(x)`)
+Cosinus (`cos(x)`)
+Tangent  (`tan(x)`)
+Arcsinus (`arcsin(x)`)
+Arccosinus (`arccos(x)`)
+Arctangent (`arctan(x)`)
+Exponential (`exp(x)`, recommended over `e^x`)
+Natural logarithm (`ln(x)`)
+Absolute value (`abs(x)`)
+Floor function (`floor(x)`)
+Ceil function (`ceil(x)`)
+Random  (Uniform [0, 1]) (`rand(x)`)
+Gamma (`gamma(x)`)
 
+//! 15) Exponential                     (using `exp(x)`)
+//! 16) Natural logarithm               (using `ln(x)`)
+//! 17) Absolute value                  (using `abs(x)`)
+//! 18) Floor function                  (using `floor(x)`)
+//! 19) Ceil function                   (using `ceil(x)`)
+//! 20) Random  (Uniform [0, 1])        (using `rand(x)`)
+//! 21) Gamma                           (using `gamma(x)`)
+         */
     let evaluation_point_str: Option<&String> = matched.get_one::<String>("evaluation_point");
 
     let evaluation_point: Option<Number> = match evaluation_point_str {
