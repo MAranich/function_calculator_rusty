@@ -987,39 +987,6 @@ impl AST {
         return false;
     }
 
-    // Simplifies the parts of the tree that can be substitutes by the correspondent numerical value.
-    /* pub fn simplify_expression(&mut self) -> Result<(), String> {
-
-        //Idea: get the largest tree that does not contain any variable, evaluete it and substitute it.
-        // Repeat this until the largest one is a leaf.
-
-        // Idea 2: Get ALL subtrees without variables. Filter out leafs. From the bottom up,
-        // evaluate them and substitute them.
-
-        // Idea 3: get a node, call contains_variable(). If true, evaluate and simplify,
-        // Otherwise call recursively on the children
-
-        if self.children.is_empty() {
-            //node is a leaf. It is already simplified, do early return.
-            return Ok(());
-        }
-
-        if !Self::contains_variable(self) {
-            // Simplify expression
-            let result: Number = self.evaluate()?;
-            self.value = Element::Number(result);
-            self.children.clear();
-
-        } else {
-
-            for child in &mut self.children {
-                child.borrow_mut().simplify_expression()?;
-            }
-        }
-
-        return Ok(());
-    }*/
-
     /// Simplifies the parts of the tree that can be substitutes by the correspondent [Number] value.
     ///
     /// If expression contains no variables, call direcly [AST::evaluate] since it's more efficient.
@@ -1078,8 +1045,8 @@ impl AST {
     /// 16)     (x * y)^a = x^a * y^a
     /// 17)     (x / y)^a = x^a / y^a
     /// 19)     (a^b)^c = a^(b*c)
-    /// 20.1)     a * 1/b = a/b    
-    /// 20.2)     a * (c/b) = (a*c)/b       (where c is a constant (number))
+    /// 20.1)   a * 1/b = a/b    
+    /// 20.2)   a * (c/b) = (a*c)/b       (where c is a constant (number))
     /// 23)     -1*x = -x
     /// 24)     c * -x = (-c)*x         // constant mult. by neg. expression => opposite constant * expression
     /// 25)     -(c) = (-c)             // negated constants become constants with the oposite value.  
@@ -1091,7 +1058,7 @@ impl AST {
     ///
     ///
     /// Discarded:  
-    /// 9)   0 ^ x = 0                  (if x is neg or 0, it does not work; maybe retrun err ???)
+    /// 9)   0 ^ x = 0                  (if x is neg or 0, it does not work; x can be a function)
     /// 11)  x^a * x^b = x^(a+b)        (done in join_terms)
     ///
     /// Assumes all numerical subtrees have been evaluated
@@ -1187,7 +1154,7 @@ impl AST {
                     (false, false) => self,
                 }
             }
-            Element::Sub => {
+            Element::Sub => 'sub: {
                 // 1) x - 0 = x
 
                 let substitute_1: bool =
@@ -1201,10 +1168,25 @@ impl AST {
                     };
 
                 if substitute_1 {
-                    self.children[0].borrow().deep_copy()
-                } else {
-                    self
+                    break 'sub self.children[0].borrow().deep_copy();
                 }
+
+                // 22)     0-x = -x
+
+                let aux = self.children[0].borrow().value.clone();
+                if let Element::Number(n) = aux {
+                    if n.get_numerical() == 0.0 {
+                        let inner: Rc<RefCell<AST>> = Rc::clone(&self.children[1]);
+                        self.value = Element::Sub;
+
+                        self.children.clear();
+                        self.children.push(inner);
+
+                        break 'sub self;
+                    }
+                }
+
+                self
             }
             Element::Mult => 'mult: {
                 // 2)   x * 0 = 0
