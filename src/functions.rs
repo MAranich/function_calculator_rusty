@@ -2,7 +2,6 @@ use core::f64;
 use std::{
     cell::RefCell,
     f64::consts::{E, PI},
-    fmt::format,
     mem::transmute,
     rc::Rc,
 };

@@ -1597,7 +1597,8 @@ impl AST {
                 // 18)     x^-a = 1/x^a
                 let aux: Element = self.children[1].borrow().value.clone();
                 if let Element::Neg = aux {
-                    let inner_exp: Rc<RefCell<AST>> = Rc::clone(&self.children[1].borrow().children[0]);
+                    let inner_exp: Rc<RefCell<AST>> =
+                        Rc::clone(&self.children[1].borrow().children[0]);
                     self.children[1] = inner_exp; // remove neg and attach what's inside
 
                     // invert self and return
@@ -1609,9 +1610,9 @@ impl AST {
 
                 if let Element::Number(n) = aux {
                     if !n.is_positive() {
-                        let exp: Number = n.flip(); 
-                        self.children[1].borrow_mut().value = Element::Number(exp); 
-    
+                        let exp: Number = n.flip();
+                        self.children[1].borrow_mut().value = Element::Number(exp);
+
                         // invert self and return
                         break 'exp AST {
                             value: Element::Div,
@@ -1619,7 +1620,6 @@ impl AST {
                         };
                     }
                 }
-
 
                 self
             }
@@ -2623,8 +2623,34 @@ impl AST {
 
                 */
 
-                #[warn(UncompleteCode)]
-                self.clone()
+                // f(x)
+                let left_expr: AST = self.children[0].borrow().deep_copy();
+                // g(x)
+                let right_expr: AST = self.children[1].borrow().deep_copy();
+
+                // f'(x)
+                let left_der: AST = left_expr.insert_derive_new();
+                // g'(x)
+                let right_der: AST = right_expr.insert_derive_new();
+
+                // floor(f(x)/g(x))
+                let floor_term: AST = AST {
+                    value: Element::Div,
+                    children: vec![get_ptr(left_expr), get_ptr(right_expr)],
+                }
+                .push_function(FnIdentifier::Floor);
+
+                // g'(x) * floor(f(x)/g(x))
+                let g_floor: AST = AST {
+                    value: Element::Mult,
+                    children: vec![get_ptr(right_der), get_ptr(floor_term)],
+                };
+
+                // f'(x) - g'(x) * floor(f(x)/g(x))
+                AST {
+                    value: Element::Sub,
+                    children: vec![get_ptr(left_der), get_ptr(g_floor)],
+                }
             }
             Element::Number(_) => AST {
                 //derivative of constant is 0
@@ -3236,7 +3262,6 @@ impl Number {
             Number::Rational(n, d) => Number::Rational(-n, d),
         }
     }
-
 
     /// Returns true is the number is positive or 0.
     pub fn is_positive(&self) -> bool {
