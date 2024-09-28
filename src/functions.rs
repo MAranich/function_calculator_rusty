@@ -880,12 +880,21 @@ impl Functions {
                         get_ptr(argument.borrow().deep_copy()),
                         get_ptr(h_ast.clone()),
                     ],
-                }.push_function(FnIdentifier::Gamma);
+                }
+                .push_function(FnIdentifier::Gamma);
 
                 // gamma(x+h) - gamma(x)
                 let diference: AST = AST {
                     value: Element::Sub,
-                    children: vec![get_ptr(upper), get_ptr(argument.borrow().deep_copy().push_function(FnIdentifier::Gamma))],
+                    children: vec![
+                        get_ptr(upper),
+                        get_ptr(
+                            argument
+                                .borrow()
+                                .deep_copy()
+                                .push_function(FnIdentifier::Gamma),
+                        ),
+                    ],
                 };
 
                 // (gamma(x+h) - gamma(x)) / h
