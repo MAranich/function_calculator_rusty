@@ -9,7 +9,7 @@ use std::{
 
 use rand::Rng;
 
-use crate::{datastructures::Number, Element, AST, AST_ONE};
+use crate::{datastructures::Number, get_ptr, Element, AST, AST_ONE};
 
 /*
 sum:                x + y
@@ -57,9 +57,9 @@ pub enum FnIdentifier {
     Abs,
     Floor,
     Ceil,
-    Random, 
-    Real, 
-    Rational, 
+    Random,
+    Real,
+    Rational,
     Gamma,
 }
 
@@ -95,7 +95,7 @@ pub const LIST_CONST_VAUE_STR: [(&'static str, Number); 6] = [
 //const phi: f64 = f64::from_bits(0x3ff9e3779b97f4a8);
 //const phi: f64 = unsafe { transmute::<u64, f64>(0x3ff9e3779b97f4a8) } ;
 
-const TWO_PI: f64 = f64::consts::PI * 2.0; 
+const TWO_PI: f64 = f64::consts::PI * 2.0;
 
 pub struct Functions {}
 pub struct Constants {}
@@ -288,30 +288,26 @@ impl Functions {
                 // Returns a random uniformley distributed random number in [0, 1]
                 // ^not sure if 0 and 1 are included
 
-            let mut rand_gen: rand::prelude::ThreadRng = rand::thread_rng(); 
+                let mut rand_gen: rand::prelude::ThreadRng = rand::thread_rng();
 
-            Number::Real(rand_gen.gen::<f64>())
-
+                Number::Real(rand_gen.gen::<f64>())
             }
             FnIdentifier::Real => {
-                // Cast the number to a real representation. 
+                // Cast the number to a real representation.
 
                 Number::Real(input.get_numerical())
-
-            }, 
+            }
             FnIdentifier::Rational => {
-                // Cast the number to the most accurate rational representation. 
+                // Cast the number to the most accurate rational representation.
 
                 match input {
                     Number::Rational(_, _) => input,
-                    Number::Real(r) => {
-                        match Number::rationalize(r) {
-                            Ok(v) => v,
-                            Err(v) => v,
-                        }
+                    Number::Real(r) => match Number::rationalize(r) {
+                        Ok(v) => v,
+                        Err(v) => v,
                     },
                 }
-            }, 
+            }
             FnIdentifier::Gamma => 'gamma: {
                 /*
                     For the computation:
@@ -326,8 +322,8 @@ impl Functions {
 
                  */
 
-                let is_int: bool = input.is_integer(); 
-                let is_positive: bool = input.is_positive(); 
+                let is_int: bool = input.is_integer();
+                let is_positive: bool = input.is_positive();
 
                 if is_int {
                     if !is_positive {
@@ -389,42 +385,39 @@ impl Functions {
                 /*
                  ln(gamma(x)) = 1/2 * (ln(2*pi) - ln(x)) + x * (ln(x+1/(12*x - 1/(10*x)))-1)
 
-                 then exponentiate. Done in this way for numerical stability. 
-                 Precision seems to increase as x grows. (Did I read that this 
+                 then exponentiate. Done in this way for numerical stability.
+                 Precision seems to increase as x grows. (Did I read that this
                  is acurate with an O(1/n) error somewhere (???))
 
                  todo: pass to ramanujan aprox. for precision ?
-                
+
                 */
 
-                
-                
-                let mut x: f64 = input.get_numerical(); 
+                let mut x: f64 = input.get_numerical();
 
                 let correction_term: f64 = {
                     //gamma(z + 1) = z * gamma(z)
                     //gamma(z) = (z - 1) * gamma(z - 1)
-                    let mut acc: f64 = 1.0; 
+                    let mut acc: f64 = 1.0;
                     while x < 1.0 {
-                        acc = acc * x; 
-                        x += 1.0; 
+                        acc = acc * x;
+                        x += 1.0;
                     }
                     acc
-                }; 
-                
-                let left_term: f64 = 0.5 * (TWO_PI.ln() - x.ln()); 
-                let denominator: f64 = 12.0 * x - 1.0/(10.0 * x); 
-                let right_term: f64 = x * ((x + 1.0/denominator).ln() - 1.0); 
-                
-                let ret: f64 = (left_term + right_term).exp(); 
+                };
 
-                println!("Number obtained: {}", x); 
-                println!("left: {}", left_term); 
-                println!("right: {}", right_term); 
-                println!("ret: {}", ret); 
-                
+                let left_term: f64 = 0.5 * (TWO_PI.ln() - x.ln());
+                let denominator: f64 = 12.0 * x - 1.0 / (10.0 * x);
+                let right_term: f64 = x * ((x + 1.0 / denominator).ln() - 1.0);
+
+                let ret: f64 = (left_term + right_term).exp();
+
+                println!("Number obtained: {}", x);
+                println!("left: {}", left_term);
+                println!("right: {}", right_term);
+                println!("ret: {}", ret);
+
                 Number::Real(ret / correction_term)
-                
             }
         };
 
@@ -870,13 +863,41 @@ impl Functions {
                 crate::datastructures::AST_ZERO.clone()
             }
             FnIdentifier::Real | FnIdentifier::Rational => {
-                // this is only a cast between Number types, so the derivative is the identity. 
+                // this is only a cast between Number types, so the derivative is the identity.
                 AST_ONE.clone()
             }
             FnIdentifier::Gamma => {
-                todo!();
+                // use classical definition of derivative for a good aplroximation of the origina result.
+
+                let h: f64 = 0.0000001;
+                let h_ast: AST = AST::from_number(Number::Real(h));
+                let argument: Rc<RefCell<AST>> = Rc::clone(&input.children[0]);
+
+                // gamma(x + h)
+                let upper: AST = AST {
+                    value: Element::Add,
+                    children: vec![
+                        get_ptr(argument.borrow().deep_copy()),
+                        get_ptr(h_ast.clone()),
+                    ],
+                }.push_function(FnIdentifier::Gamma);
+
+                // gamma(x+h) - gamma(x)
+                let diference: AST = AST {
+                    value: Element::Sub,
+                    children: vec![get_ptr(upper), get_ptr(argument.borrow().deep_copy().push_function(FnIdentifier::Gamma))],
+                };
+
+                // (gamma(x+h) - gamma(x)) / h
+
+                AST {
+                    value: Element::Div,
+                    children: vec![get_ptr(diference), get_ptr(h_ast)],
+                }
             }
-            FnIdentifier::Random => return Err(String::from("Random function has no derivative. ")), 
+            FnIdentifier::Random => {
+                return Err(String::from("Random function has no derivative. "))
+            }
             FnIdentifier::Derive => return Err(String::from("Cannot derive a derivative. \n")),
         };
 
@@ -938,9 +959,9 @@ impl FnIdentifier {
             FN_STR_CEIL => FnIdentifier::Ceil,
             FN_STR_FLOOR => FnIdentifier::Floor,
             FN_STR_GAMMA => FnIdentifier::Gamma,
-            FN_STR_REAL => FnIdentifier::Real, 
-            FN_STR_RATIONAL | FN_STR_RATIONAL_2 => FnIdentifier::Rational, 
-            FN_STR_RANDOM | FN_STR_RANDOM_2 | FN_STR_RANDOM_3 => FnIdentifier::Random, 
+            FN_STR_REAL => FnIdentifier::Real,
+            FN_STR_RATIONAL | FN_STR_RATIONAL_2 => FnIdentifier::Rational,
+            FN_STR_RANDOM | FN_STR_RANDOM_2 | FN_STR_RANDOM_3 => FnIdentifier::Random,
             crate::processing::DERIVE_KEYWORD_1 | crate::processing::DERIVE_KEYWORD_2 => {
                 FnIdentifier::Derive
             }
@@ -969,9 +990,9 @@ impl ToString for FnIdentifier {
             FnIdentifier::Abs => FN_STR_ABS.to_string(),
             FnIdentifier::Ceil => FN_STR_CEIL.to_string(),
             FnIdentifier::Floor => FN_STR_FLOOR.to_string(),
-            FnIdentifier::Random => FN_STR_RANDOM.to_string(), 
-            FnIdentifier::Real => FN_STR_REAL.to_string(), 
-            FnIdentifier::Rational => FN_STR_RATIONAL.to_string(), 
+            FnIdentifier::Random => FN_STR_RANDOM.to_string(),
+            FnIdentifier::Real => FN_STR_REAL.to_string(),
+            FnIdentifier::Rational => FN_STR_RATIONAL.to_string(),
             FnIdentifier::Gamma => FN_STR_GAMMA.to_string(),
         }
     }
