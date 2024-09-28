@@ -1044,17 +1044,17 @@ impl AST {
     /// 15.3)   a / (b/c) = a*c / b
     /// 16)     (x * y)^a = x^a * y^a
     /// 17)     (x / y)^a = x^a / y^a
+    /// 18)     x^-a = 1/x^a
     /// 19)     (a^b)^c = a^(b*c)
     /// 20.1)   a * 1/b = a/b    
     /// 20.2)   a * (c/b) = (a*c)/b       (where c is a constant (number))
+    /// 22)     0-x = -x
     /// 23)     -1*x = -x
     /// 24)     c * -x = (-c)*x         // constant mult. by neg. expression => opposite constant * expression
     /// 25)     -(c) = (-c)             // negated constants become constants with the oposite value.  
     /// Unimplemented:
     /// 12)     sqrt(x^(2*a)) = |x|^a    // a is whole
-    /// 18)     x^-a = 1/x^a
     /// 21)     (a-b)*-c = c * (b - a)
-    /// 22)     0-x = -x
     ///
     ///
     /// Discarded:  
@@ -1594,6 +1594,33 @@ impl AST {
                     break 'exp self;
                 }
 
+                // 18)     x^-a = 1/x^a
+                let aux: Element = self.children[1].borrow().value.clone();
+                if let Element::Neg = aux {
+                    let inner_exp: Rc<RefCell<AST>> = Rc::clone(&self.children[1].borrow().children[0]);
+                    self.children[1] = inner_exp; // remove neg and attach what's inside
+
+                    // invert self and return
+                    break 'exp AST {
+                        value: Element::Div,
+                        children: vec![get_ptr(AST_ONE.clone()), get_ptr(self)],
+                    };
+                }
+
+                if let Element::Number(n) = aux {
+                    if !n.is_positive() {
+                        let exp: Number = n.flip(); 
+                        self.children[1].borrow_mut().value = Element::Number(exp); 
+    
+                        // invert self and return
+                        break 'exp AST {
+                            value: Element::Div,
+                            children: vec![get_ptr(AST_ONE.clone()), get_ptr(self)],
+                        };
+                    }
+                }
+
+
                 self
             }
             Element::Neg => 'neg: {
@@ -1768,7 +1795,7 @@ impl AST {
                                 if other.children[1].borrow().children[0].borrow().eq(&input) {
                                     // and base is f
                                     let mut exponent: Number = n.clone();
-                                    exponent = exponent * Number::Rational(-1, 1);
+                                    exponent = exponent.flip();
                                     return Some(exponent);
                                 }
                             }
@@ -2096,9 +2123,11 @@ impl AST {
                     Element::Mod => child_right.to_string(),
                     Element::Number(number) => match number {
                         Number::Real(_) => number.as_str(),
-                        Number::Rational(_, _) => {
+                        Number::Rational(_, d) => {
                             if let Some(num_str) = functions::Constants::is_constant(&number) {
                                 num_str.to_string()
+                            } else if d == 1 {
+                                number.as_str()
                             } else {
                                 format!("({})", number.as_str())
                             }
@@ -2132,9 +2161,11 @@ impl AST {
                     Element::Fact => child_right.to_string(),
                     Element::Number(number) => match number {
                         Number::Real(_) => number.as_str(),
-                        Number::Rational(_, _) => {
+                        Number::Rational(_, d) => {
                             if let Some(num_str) = functions::Constants::is_constant(&number) {
                                 num_str.to_string()
+                            } else if d == 1 {
+                                number.as_str()
                             } else {
                                 format!("({})", number.as_str())
                             }
@@ -3197,6 +3228,15 @@ impl Number {
             _ => false, //TODO: floor(x) == x
         }
     }
+
+    /// Returns the negative of self
+    pub fn flip(self) -> Self {
+        match self {
+            Number::Real(r) => Number::Real(-r),
+            Number::Rational(n, d) => Number::Rational(-n, d),
+        }
+    }
+
 
     /// Returns true is the number is positive or 0.
     pub fn is_positive(&self) -> bool {
