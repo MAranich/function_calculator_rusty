@@ -810,11 +810,10 @@ impl SRA {
                 }
             }
             TokenClass::Identifier => {
-                let lexemme = new_tok.lexeme.as_ref().unwrap(); 
+                let lexemme = new_tok.lexeme.as_ref().unwrap();
                 if lexemme == "x" {
-                    ret = Element::Var; 
-                }
-                else {
+                    ret = Element::Var;
+                } else {
                     ret = Element::Function(FnIdentifier::from_str(lexemme)?);
                 }
             }
@@ -928,14 +927,15 @@ impl AST {
         true
     }
 
-    /// Adds a function that gets as argument the given function. 
-    /// 
-    /// So if `self = f(x)` and `function = g(x)`, this returns an [AST] 
+    /// Adds a function that gets as argument the given function.
+    ///
+    /// So if `self = f(x)` and `function = g(x)`, this returns an [AST]
     /// representing `g(f(x))`
     pub fn push_function(self, function: functions::FnIdentifier) -> Self {
-
-        AST { value: Element::Function(function), children: vec![get_ptr(self)] }
-
+        AST {
+            value: Element::Function(function),
+            children: vec![get_ptr(self)],
+        }
     }
 
     /// Sorts the given [AST] in a consistent way
@@ -1633,17 +1633,16 @@ impl AST {
 
                 self
             }
-            Element::Number(mut num) => {
-                match &num {
-                    Number::Real(r) => match Number::rationalize(*r){
-                        Ok(v) => AST::from_number(v),
-                        Err(_) => AST::from_number(num),
-                    },
-                    Number::Rational(_, _) => {
-                        num.minimize(); 
-                        AST::from_number(num)},
+            Element::Number(mut num) => match &num {
+                Number::Real(r) => match Number::rationalize(*r) {
+                    Ok(v) => AST::from_number(v),
+                    Err(_) => AST::from_number(num),
+                },
+                Number::Rational(_, _) => {
+                    num.minimize();
+                    AST::from_number(num)
                 }
-            }
+            },
             _ => {
                 // No simplification for:
                 //      derive, None, Number, mod, fact, var
@@ -2113,11 +2112,20 @@ impl AST {
                     Element::Exp => child_right.to_string(),
                     Element::Fact => child_right.to_string(),
                     Element::Mod => child_right.to_string(),
-                    Element::Number(number) => number.as_str(),
+                    Element::Number(number) => match number {
+                        Number::Real(_) => number.as_str(),
+                        Number::Rational(_, _) => {
+                            if let Some(num_str) = functions::Constants::is_constant(&number) {
+                                num_str.to_string()
+                            } else {
+                                format!("({})", number.as_str())
+                            }
+                        }
+                    },
                     Element::Var => String::from("x"),
                     Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
-                    _ => format!("({})", child_right.to_string()), // +, -, *, /
+                    _ => format!("({})", child_right.to_string()), // +, -, *, /, --
                 };
 
                 format!("{}/{}", numerator, denominator)
@@ -2140,7 +2148,16 @@ impl AST {
                     Element::Function(_) => child_right.to_string(),
                     Element::Exp => child_right.to_string(),
                     Element::Fact => child_right.to_string(),
-                    Element::Number(number) => number.as_str(),
+                    Element::Number(number) => match number {
+                        Number::Real(_) => number.as_str(),
+                        Number::Rational(_, _) => {
+                            if let Some(num_str) = functions::Constants::is_constant(&number) {
+                                num_str.to_string()
+                            } else {
+                                format!("({})", number.as_str())
+                            }
+                        }
+                    },
                     Element::Var => String::from("x"),
                     Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
@@ -2153,14 +2170,11 @@ impl AST {
                 let child: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child.value.clone() {
                     Element::Derive => child.to_string(),
-                    Element::Function(ident) => {
-                        format!("{}({})", ident.to_string(), child.to_string())
-                    }
+                    Element::Function(_) => child.to_string(),
                     Element::Fact => child.to_string(),
-                    Element::Number(number) => number.as_str(),
                     Element::Var => String::from("x"),
                     Element::None => String::from("None"),
-                    _ => format!("({})", child.to_string()), // +, -, *, /, ^
+                    _ => format!("({})", child.to_string()), // +, -, *, /, ^, Number
                 };
 
                 format!("{}!", left_side)
@@ -3431,8 +3445,8 @@ impl Number {
             // right at the start of the program (before this method is called)
             // once depending on the flags.
             NUMERICAL_OUTPUTS
-        }; 
-            
+        };
+
         if numerical_output_read {
             return self.as_numerical_str();
         }
@@ -3500,27 +3514,22 @@ impl PartialEq for Number {
             (Number::Real(r), Number::Rational(n, d)) => r * *d as f64 == *n as f64,
             (Number::Rational(n, d), Number::Real(r)) => r * *d as f64 == *n as f64,
             (Number::Rational(n1, d1), Number::Rational(n2, d2)) => {
-
                 // n1 * *d2 as i64 == n2 * *d1 as i64
-                
 
-                let mult_1: Option<i64> = n1.checked_mul(*d2 as i64); 
-                let mult_2: Option<i64> = n2.checked_mul(*d1 as i64); 
+                let mult_1: Option<i64> = n1.checked_mul(*d2 as i64);
+                let mult_2: Option<i64> = n2.checked_mul(*d1 as i64);
 
                 match (mult_1, mult_2) {
-                    (Some(a), Some(b)) => {
-                        a == b
-                    }
+                    (Some(a), Some(b)) => a == b,
                     _ => {
-                        let a: u128 = *n1 as u128; 
-                        let b: u128 = *d2 as u128; 
-                        let c: u128 = *n2 as u128; 
-                        let d: u128 = *d1 as u128; 
+                        let a: u128 = *n1 as u128;
+                        let b: u128 = *d2 as u128;
+                        let c: u128 = *n2 as u128;
+                        let d: u128 = *d1 as u128;
 
-                        a*b == c*d
+                        a * b == c * d
                     }
                 }
-
             }
         }
     }
@@ -3537,21 +3546,19 @@ impl PartialOrd for Number {
 
                 //Some((n1 * *d2 as i64).cmp(&(n2 * *d1 as i64)))
 
-                let mult_1: Option<i64> = n1.checked_mul(*d2 as i64); 
-                let mult_2: Option<i64> = n2.checked_mul(*d1 as i64); 
+                let mult_1: Option<i64> = n1.checked_mul(*d2 as i64);
+                let mult_2: Option<i64> = n2.checked_mul(*d1 as i64);
                 match (mult_1, mult_2) {
-                    (Some(a), Some(b)) => Some(a.cmp(&b)), 
+                    (Some(a), Some(b)) => Some(a.cmp(&b)),
                     _ => {
-                        let a: i128 = *n1 as i128; 
-                        let b: i128 = *d2 as i128; 
-                        let c: i128 = *n2 as i128; 
-                        let d: i128 = *d1 as i128; 
+                        let a: i128 = *n1 as i128;
+                        let b: i128 = *d2 as i128;
+                        let c: i128 = *n2 as i128;
+                        let d: i128 = *d1 as i128;
 
                         Some((a * b).cmp(&(c * d)))
-
                     }
                 }
-
             }
         }
     }
@@ -3591,7 +3598,7 @@ impl ops::Add<Number> for Number {
                     }
 
                     // Least Common Multiple
-                    let lcm: u64 = lcm_res.unwrap(); 
+                    let lcm: u64 = lcm_res.unwrap();
 
                     let mult_factor_left: i64 = lcm as i64 / left_den as i64;
                     let mult_factor_right: i64 = lcm as i64 / right_den as i64;
@@ -3599,8 +3606,8 @@ impl ops::Add<Number> for Number {
                     let num: i64 = right_num * mult_factor_right + left_num * mult_factor_left;
                     let den: u64 = lcm;
 
-                    let mut new_rational: Number =
-                        Number::new_rational(num, den).expect("Attempting to add 2 Rationals and 1 of them has 0 as divisor. ");
+                    let mut new_rational: Number = Number::new_rational(num, den)
+                        .expect("Attempting to add 2 Rationals and 1 of them has 0 as divisor. ");
                     new_rational.minimize();
 
                     return new_rational;
@@ -3653,8 +3660,9 @@ impl ops::Sub<Number> for Number {
                     let num: i64 = left_num * mult_factor_left - right_num * mult_factor_right;
                     let den: u64 = lcm;
 
-                    let mut new_rational: Number =
-                        Number::new_rational(num, den).expect("Attempting to substract 2 Rationals and 1 of them has 0 as divisor. ");
+                    let mut new_rational: Number = Number::new_rational(num, den).expect(
+                        "Attempting to substract 2 Rationals and 1 of them has 0 as divisor. ",
+                    );
                     new_rational.minimize();
 
                     return new_rational;
@@ -3700,9 +3708,9 @@ impl ops::Mul<Number> for Number {
                             let den: f64 = left_den as f64 * right_den as f64;
                             Number::new_real(num as f64 / den)
                         }
-                        (Some(num), Some(den)) => {
-                            Number::new_rational(num, den).expect("Attempting to multiply 2 Rationals and 1 of them has 0 as divisor. ")
-                        }
+                        (Some(num), Some(den)) => Number::new_rational(num, den).expect(
+                            "Attempting to multiply 2 Rationals and 1 of them has 0 as divisor. ",
+                        ),
                     };
 
                     new_rational.minimize();
