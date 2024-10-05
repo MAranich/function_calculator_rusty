@@ -1,5 +1,5 @@
 use rand::prelude::*;
-use rayon::prelude::*;
+use rayon::{prelude::*, vec};
 
 use crate::*;
 use core::panic;
@@ -43,7 +43,7 @@ fn global_derive_test() {
         println!("\n\nTesting input: {:#?}\n", input);
 
         match generate_ast(input, &mut calc, true) {
-            Ok(ast) => match ast.derive() {
+            Ok(ast) => match ast.derive('x') {
                 Ok(_der) => {}
                 Err(msg) => panic!("Derivation failed with the error:\n{}", msg),
             },
@@ -602,7 +602,7 @@ fn derive_test() {
             value: Element::Add,
             children: vec![
                 Rc::new(RefCell::new(AST {
-                    value: Element::Var,
+                    value: Element::Var('x'),
                     children: Vec::new(),
                 })),
                 Rc::new(RefCell::new(AST::from_number(Number::Rational(3, 1)))),
@@ -614,7 +614,7 @@ fn derive_test() {
     //x^2 * 3
     let tree2: AST = {
         let x: AST = AST {
-            value: Element::Var,
+            value: Element::Var('x'),
             children: Vec::new(),
         };
 
@@ -640,7 +640,10 @@ fn derive_test() {
     let tree3: AST = {
         let arccos: AST = AST {
             value: Element::Function(functions::FnIdentifier::Arccos),
-            children: vec![get_ptr(AST_VAR.clone())],
+            children: vec![get_ptr(AST {
+            value: Element::Var('x'),
+            children: vec![],
+        })],
         };
 
         let arccos_10: AST = AST {
@@ -653,7 +656,10 @@ fn derive_test() {
 
         AST {
             value: Element::Mult,
-            children: vec![get_ptr(AST_VAR.clone()), get_ptr(arccos_10)],
+            children: vec![get_ptr(AST {
+            value: Element::Var('x'),
+            children: vec![],
+        }), get_ptr(arccos_10)],
         }
     }
     .insert_derive();
@@ -661,7 +667,7 @@ fn derive_test() {
     //ln(tan(x + 6) + 10)
     let tree4: AST = {
         let x: AST = AST {
-            value: Element::Var,
+            value: Element::Var('x'),
             children: vec![],
         };
 
@@ -694,7 +700,7 @@ fn derive_test() {
     ];
 
     for (ast, eval_point, solution) in tree_list {
-        let (der, _): (AST, bool) = match ast.execute_derives(false, false) {
+        let (der, _): (AST, bool) = match ast.execute_derives('x', false, false) {
             Ok(v) => v,
             Err(e) => panic!(
                 "{} ||| {} ({:?}) = {:?}",
@@ -708,7 +714,7 @@ fn derive_test() {
         println!("AST: {}\n", ast.to_string());
         println!("Der AST: {}\n", der.to_string());
 
-        let awnser: Number = match der.evaluate(Some(eval_point.clone())) {
+        let awnser: Number = match der.evaluate(vec![('x', eval_point.clone())]) {
             Ok(v) => v,
             Err(e) => panic!(
                 "Error: {} ||| {} ({:?}) = {:?}",

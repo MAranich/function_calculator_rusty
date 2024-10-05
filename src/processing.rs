@@ -400,12 +400,12 @@ pub fn negation_substituter(input: Vec<Token>) -> Vec<Token> {
     return ret;
 }
 
-/// Substitute the literal "x" by a [Token] with the variant [TokenClass::Variable].
+/// Substitute identifiers of 1 char by a [Token] with the variant [TokenClass::Variable].
 pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
     //let mut ret: Vec<Token> = Vec::with_capacity(input.len());
     let variable_raw_model: TokenModel = TokenModel {
         token: Token {
-            lexeme: Some(String::from("x")),
+            lexeme: None,
             class: TokenClass::Identifier,
         },
         compare_lexemme: true,
@@ -413,12 +413,31 @@ pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
 
     let variable_model: TokenModel = TokenModel {
         token: Token {
-            lexeme: Some(String::from("x")),
+            lexeme: None,
             class: TokenClass::Variable,
         },
-        compare_lexemme: true,
+        compare_lexemme: false,
     };
 
+    let ret: Vec<Token> = input
+        .into_iter()
+        .map(|tok| 'clos: {
+            if tok.class == TokenClass::Identifier {
+                if let Some(lexeme) = tok.lexeme.clone() {
+                    if lexeme.chars().count() == 1 {
+                        // one single char
+                        break 'clos Token {
+                            lexeme: Some(lexeme),
+                            class: TokenClass::Variable,
+                        };
+                    }
+                }
+            }
+            tok
+        })
+        .collect();
+
+    /*
     let ret: Vec<Token> = input
         .into_iter()
         .map(|tok| {
@@ -428,7 +447,7 @@ pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
                 tok
             }
         })
-        .collect();
+        .collect();*/
 
     /*
     for tok in input {
@@ -500,12 +519,16 @@ pub fn generate_ast(
         }
     }
 
+    println!("1: {:#?}\n\n", token_list); 
+
     // remove redundancy:
     {
         let num_tokens_with_redundancy: usize = token_list.len();
         let mut redundancy_remover: SRA = SRA::new(setup::get_pre_rules());
 
+        let i = 0; 
         for tok in token_list {
+            println!("{i}\n"); 
             redundancy_remover.advance(tok)?;
         }
 
@@ -521,11 +544,15 @@ pub fn generate_ast(
         }
     }
 
+    println!("2: {:#?}\n\n", token_list); 
+
+
     // negation tokens:
     token_list = negation_substituter(token_list);
 
     // variable detection
     token_list = variable_substituter(token_list);
+
 
     // transform to RPN:
     {
@@ -595,7 +622,7 @@ pub fn evaluate_expression(
 ) -> Result<Number, String> {
     let ast: AST = generate_ast(input, calc, print_messages)?;
 
-    let final_result: Number = ast.evaluate(None)?;
+    let final_result: Number = ast.evaluate(Vec::new())?;
     if print_messages {
         //display result
         println!("\nEvaluated to: \t{:?}\n\n", final_result);
@@ -604,68 +631,34 @@ pub fn evaluate_expression(
     return Ok(final_result);
 }
 
-/// Parses the given number and returns a [Number] if it succeds.
+/// Parses input and returns the variable and the number it is assigned to in a tuple.
 ///
-/// The input string can be in the form `a` or `a/b` where a and b
-/// can be integers or floats. Note that if `b == 0`, an error will
-/// be returned.
-pub fn parse_evaluation_point(input: &String) -> Result<Number, String> {
-    let mut str_number: String = String::new();
-    let mut str_number_denominator: String = String::new();
+/// If some error ocurrs, a string is returned.
+pub fn parse_evaluation_args(input: &str) -> Result<(char, Number), String> {
+    let mut str_iterator: std::str::Chars<'_> = input.chars();
+    let variable_identifier: char = match str_iterator.next() {
+        Some(i) => i,
+        None => return Err(String::from("Evaluation point argument is empty. ")),
+    };
 
-    let mut found_division: bool = false;
-
-    for c in input.chars() {
-        if c == '/' {
-            found_division = true;
-            continue;
-        }
-
-        if found_division {
-            str_number_denominator.push(c);
-        } else {
-            str_number.push(c);
-        }
-    }
-
-    // We will check iw we can parse them as i64 and if not as f64. If it fails, we panic
-
-    if found_division {
-        // has the form a/b
-
-        if let Ok(numerator) = str_number.parse::<i64>() {
-            if let Ok(denominator) = str_number_denominator.parse::<i64>() {
-                if denominator == 0 {
-                    return Err(String::from("Evaluation point contains division by 0. \n"));
-                }
-
-                return Ok(Number::Rational(numerator, denominator as u64));
-            } else if let Ok(denominator) = str_number_denominator.parse::<f64>() {
-                if denominator == 0.0 {
-                    return Err(String::from("Evaluation point contains division by 0. \n"));
-                }
-                return Ok(Number::Real(numerator as f64 / denominator));
-            }
-        } else if let Ok(numerator) = str_number.parse::<f64>() {
-            if let Ok(denominator) = str_number_denominator.parse::<f64>() {
-                if denominator == 0.0 {
-                    return Err(String::from("Evaluation point contains division by 0. \n"));
-                }
-                return Ok(Number::Real(numerator / denominator));
+    match str_iterator.next() {
+        Some(equal) => {
+            if equal != '=' {
+                return Err("Equal in evaluation point argument was not fount. ".to_string());
             }
         }
-    } else {
-        // is just a single number
-
-        if let Ok(number) = str_number.parse::<i64>() {
-            return Ok(Number::Rational(number, 1 as u64));
-        } else if let Ok(number) = str_number.parse::<f64>() {
-            return Ok(Number::Real(number));
+        None => {
+            return Err(String::from(
+                "Does not follow the fomat <var char>=<number>  . ",
+            ))
         }
-    }
+    };
 
-    // at some point both the cast to i64 and f64 failed, so it's not a valid number
-    return Err(String::from(
-        "Invalid number passed as evaluation point. \n",
-    ));
+    let just_number: String = str_iterator.collect();
+
+    let parsed_num: Number = Number::parse_number(&just_number)?;
+
+    return Ok((variable_identifier, parsed_num));
 }
+
+

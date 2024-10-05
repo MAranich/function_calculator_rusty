@@ -100,7 +100,7 @@ pub enum Element {
     Fact,
     Mod,
     Number(Number),
-    Var,
+    Var(char),
     Neg,
     None,
 }
@@ -215,7 +215,7 @@ pub struct Calculator {
 ///
 /// It returns a Number or a String containing an explanation of the error.
 pub trait Evaluable {
-    fn evaluate(&self, x: Option<Number>) -> Result<Number, String>;
+    fn evaluate(&self, x: Vec<(char, Number)>) -> Result<Number, String>;
 }
 
 /// An [AST] that contains the number 0.
@@ -226,12 +226,6 @@ pub const AST_ZERO: AST = AST {
 /// An [AST] that contains the number 1.
 pub const AST_ONE: AST = AST {
     value: Element::Number(Number::Rational(1, 1)),
-    children: Vec::new(),
-};
-
-/// An [AST] that contains the variable.
-pub const AST_VAR: AST = AST {
-    value: Element::Var,
     children: Vec::new(),
 };
 
@@ -762,14 +756,13 @@ impl SRA {
         }
         let class: TokenClass = new_tok.class.clone();
 
-        let ret: Element;
-        match class {
+        let ret: Element = match class {
             TokenClass::Number => {
                 let n: f64 = new_tok.lexeme.clone().unwrap().parse::<f64>().unwrap();
                 let result: Result<Number, Number> = Number::rationalize(n);
                 match result {
-                    Ok(v) => ret = Element::Number(v),
-                    Err(_) => ret = Element::Number(Number::Real(n)),
+                    Ok(v) => Element::Number(v),
+                    Err(_) => Element::Number(Number::Real(n)),
                 }
             }
             TokenClass::Operator => {
@@ -777,30 +770,14 @@ impl SRA {
                 let aux: &String = lexeme_opt.as_ref().unwrap();
                 let lexeme_str: &str = aux.as_str();
                 match lexeme_str {
-                    ADD_STR => {
-                        ret = Element::Add;
-                    }
-                    SUB_STR => {
-                        ret = Element::Sub;
-                    }
-                    MULT_STR => {
-                        ret = Element::Mult;
-                    }
-                    DIV_STR => {
-                        ret = Element::Div;
-                    }
-                    EXP_STR => {
-                        ret = Element::Exp;
-                    }
-                    FACT_STR => {
-                        ret = Element::Fact;
-                    }
-                    MOD_STR => {
-                        ret = Element::Mod;
-                    }
-                    NEG_STR => {
-                        ret = Element::Neg;
-                    }
+                    ADD_STR => Element::Add,
+                    SUB_STR => Element::Sub,
+                    MULT_STR => Element::Mult,
+                    DIV_STR => Element::Div,
+                    EXP_STR => Element::Exp,
+                    FACT_STR => Element::Fact,
+                    MOD_STR => Element::Mod,
+                    NEG_STR => Element::Neg,
                     _ => {
                         return Err(format!(
                             "Invalid operator / operator not supported: {:?}",
@@ -810,20 +787,35 @@ impl SRA {
                 }
             }
             TokenClass::Identifier => {
-                let lexemme = new_tok.lexeme.as_ref().unwrap();
-                if lexemme == "x" {
-                    ret = Element::Var;
+                let lexemme: &String = new_tok.lexeme.as_ref().unwrap();
+
+                if lexemme.chars().count() == 1 {
+                    // this is a variable
+                    Element::Var(lexemme.chars().next().unwrap())
                 } else {
-                    ret = Element::Function(FnIdentifier::from_str(lexemme)?);
+                    Element::Function(FnIdentifier::from_str(lexemme)?)
                 }
+
             }
-            TokenClass::SpecialChar => ret = Element::None,
-            TokenClass::NTStart => ret = Element::None,
-            TokenClass::Variable => ret = Element::Var,
-            TokenClass::None => {
-                return Err(format!("Token has Tokenclass::None: {:?}", new_tok));
+            TokenClass::SpecialChar => Element::None,
+            TokenClass::NTStart => Element::None,
+            TokenClass::Variable => {
+                // Assume that all tokens with variant TokenClass::Variable have
+                // valid lexemmes with 1 char only
+
+                let var_identifier: char = match new_tok.lexeme.clone() {
+                    Some(lex) => match lex.chars().next() {
+                        Some(c) => c,
+                        None => return Err("No lexemme for variable token".to_string()),
+                    },
+                    None => return Err("No lexemme for variable token".to_string()),
+                };
+                Element::Var(var_identifier)
             }
-        }
+            _ => {
+                return Err(format!("Token has Unexpected class: {:?}", new_tok));
+            }
+        };
 
         self.ast.push(AST::new(ret));
         return Ok(());
@@ -954,7 +946,7 @@ impl AST {
     /// Only the leafs are checked. If there is a variable outside the leafs,
     /// the [AST] is invalid.  
     pub fn contains_variable(&self) -> bool {
-        if self.value == Element::Var {
+        if let Element::Var(_) = self.value {
             // In case this is a leaf, do quick check
             return true;
         }
@@ -972,7 +964,7 @@ impl AST {
 
             if borrow_node.children.len() == 0 {
                 //is a leaf
-                if current_node.borrow().value == Element::Var {
+                if let Element::Var(_) = current_node.borrow().value {
                     return true; // var found, early return
                 }
             } else {
@@ -1008,7 +1000,7 @@ impl AST {
 
             if !Self::contains_variable(&node) {
                 // Simplify expression
-                let result: Number = node.evaluate(None)?;
+                let result: Number = node.evaluate(Vec::new())?;
                 node.value = Element::Number(result);
                 node.children.clear();
             } else {
@@ -2086,7 +2078,6 @@ impl AST {
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_left.to_string(), //der, fn, mult, div, exp, fact, mod, neg
                 };
@@ -2096,7 +2087,6 @@ impl AST {
                     Element::Add => format!("({})", child_right.to_string()),
                     Element::Sub => format!("({})", child_right.to_string()),
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_right.to_string(), //der, fn, mult, div, exp, fact, mod, neg
                 };
@@ -2109,7 +2099,6 @@ impl AST {
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_left.to_string(), // der, fn, mult, div, exp, fact, mod, neg
                 };
@@ -2133,7 +2122,6 @@ impl AST {
                             }
                         }
                     },
-                    Element::Var => String::from("x"),
                     Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
                     _ => format!("({})", child_right.to_string()), // +, -, *, /, --
@@ -2148,7 +2136,6 @@ impl AST {
                     Element::Function(_) => child_left.to_string(),
                     Element::Fact => child_left.to_string(),
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => format!("({})", child_left.to_string()),
                 };
@@ -2171,7 +2158,6 @@ impl AST {
                             }
                         }
                     },
-                    Element::Var => String::from("x"),
                     Element::Neg => child_right.to_string(),
                     Element::None => String::from("None"),
                     _ => format!("({})", child_right.to_string()),
@@ -2185,7 +2171,7 @@ impl AST {
                     Element::Derive => child.to_string(),
                     Element::Function(_) => child.to_string(),
                     Element::Fact => child.to_string(),
-                    Element::Var => String::from("x"),
+                    Element::Var(i) => i.to_string(),
                     Element::None => String::from("None"),
                     _ => format!("({})", child.to_string()), // +, -, *, /, ^, Number
                 };
@@ -2196,7 +2182,6 @@ impl AST {
                 let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_left.to_string(),
                 };
@@ -2204,7 +2189,6 @@ impl AST {
                 let child_right: Ref<'_, AST> = self.children[1].borrow();
                 let right_side: String = match child_right.value.clone() {
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     _ => child_right.to_string(),
                 };
@@ -2212,12 +2196,11 @@ impl AST {
                 format!("{}%{}", left_side, right_side)
             }
             Element::Number(number) => number.as_str(),
-            Element::Var => String::from("x"),
+            Element::Var(i) => i.to_string(),
             Element::Neg => {
                 let child_left: Ref<'_, AST> = self.children[0].borrow();
                 let left_side: String = match child_left.value.clone() {
                     Element::Number(number) => number.as_str(),
-                    Element::Var => String::from("x"),
                     Element::None => String::from("None"),
                     Element::Add => format!("({})", child_left.to_string()),
                     Element::Sub => format!("({})", child_left.to_string()),
@@ -2324,7 +2307,7 @@ impl AST {
     ///
     /// Calling this function on a [AST] means that it's parent has
     /// a value of the variant [Element::Derive].
-    pub fn derive(&self) -> Result<Self, String> {
+    pub fn derive(&self, diferentiation_variable: char) -> Result<Self, String> {
         // Derivative rules: https://en.wikipedia.org/wiki/Differentiation_rules
 
         if let Element::Derive = self.value {
@@ -2342,13 +2325,13 @@ impl AST {
 
         let ret: AST = match self.value {
             Element::Derive => {
-                panic!("Impossible case. ");
+                unreachable!("Impossible case. ");
                 // todo!("No support for 2nd derivatives right now. To be implemented. ")
             }
             //Element::Derive => self.children[0].borrow().derive(),
             Element::Function(_) => {
                 //todo!("Use derivative rule for each function. ")}
-                Functions::func_derive(self)?
+                Functions::func_derive(self, diferentiation_variable)?
             }
             Element::Add => AST {
                 value: Element::Add,
@@ -2527,7 +2510,7 @@ impl AST {
                         let der: AST = self.children[0].borrow().insert_derive_new();
 
                         // a
-                        let exp: Number = self.children[1].borrow_mut().evaluate(None)?;
+                        let exp: Number = self.children[1].borrow_mut().evaluate(Vec::new())?;
 
                         // a-1
                         let exp_minus_1: Number = exp.clone() - Number::Rational(1, 1);
@@ -2572,7 +2555,7 @@ impl AST {
                         let der: AST = self.children[1].borrow().insert_derive_new();
 
                         let mut ln_a_numerical: Number =
-                            self.children[0].borrow_mut().evaluate(None)?;
+                            self.children[0].borrow_mut().evaluate(Vec::new())?;
                         ln_a_numerical =
                             Functions::find_and_evaluate(FnIdentifier::Ln, ln_a_numerical)?;
 
@@ -2657,11 +2640,15 @@ impl AST {
                 value: Element::Number(Number::Rational(0, 1)),
                 children: Vec::new(),
             },
-            Element::Var => AST {
-                // derivative of x is 1
-                value: Element::Number(Number::Rational(1, 1)),
-                children: Vec::new(),
-            },
+            Element::Var(i) => {
+                if diferentiation_variable == i {
+                    // derivative of x is 1
+                    AST_ONE.clone()
+                } else {
+                    //the derivarive of a variable we are not derivating from is 0
+                    AST_ZERO.clone()
+                }
+            }
             Element::Neg => {
                 let der: AST = self.children[0].borrow().insert_derive_new();
 
@@ -2694,7 +2681,12 @@ impl AST {
     ///
     /// If verbose = true, will print the stringified [AST] after each round of derives.
     /// Will not print the [AST] before deriving it.
-    pub fn execute_derives(&self, one_step: bool, verbose: bool) -> Result<(Self, bool), String> {
+    pub fn execute_derives(
+        &self,
+        diferentiation_variable: char,
+        one_step: bool,
+        verbose: bool,
+    ) -> Result<(Self, bool), String> {
         /* If there are multiple derives, we will only execute the ones
         that do not contain any other derive. (`der(der(x^2) + der(4x))` => `der(2*x + 4)`).
 
@@ -2739,7 +2731,7 @@ impl AST {
             for node in done {
                 // get the child and derive it.
                 let derivative: AST = match node.borrow().children.get(0) {
-                    Some(v) => v.borrow().derive()?,
+                    Some(v) => v.borrow().derive(diferentiation_variable)?,
                     None => return Err(String::from("Expected child after Element::Derive. \n")),
                 };
 
@@ -2789,6 +2781,7 @@ impl AST {
 
     pub fn full_derive(
         &self,
+        diferentiation_variable: char,
         simplify_final_expression: bool,
         print_procedure: bool,
     ) -> Result<Self, String> {
@@ -2800,7 +2793,8 @@ impl AST {
             println!("With derivative: {}\n", self.to_string());
         }
 
-        let (mut derivated, flag) = ast.execute_derives(false, print_procedure)?;
+        let (mut derivated, flag) =
+            ast.execute_derives(diferentiation_variable, false, print_procedure)?;
         assert!(flag == false); // No more missing derives since one_step = false (all steps done)
         if print_procedure {
             println!("Completely derives: {}\n", self.to_string());
@@ -2819,7 +2813,7 @@ impl AST {
 
 impl Evaluable for AST {
     /// Evaluates the [AST] recursively.
-    fn evaluate(&self, var_value: Option<Number>) -> Result<Number, String> {
+    fn evaluate(&self, var_vec: Vec<(char, Number)>) -> Result<Number, String> {
         match &self.value {
             Element::Derive => {
                 return Err(String::from(
@@ -2829,51 +2823,30 @@ impl Evaluable for AST {
             Element::Function(name) => {
                 return crate::functions::Functions::find_and_evaluate(
                     name.clone(),
-                    (*self.children[0].borrow_mut()).evaluate(var_value)?,
+                    (*self.children[0].borrow_mut()).evaluate(var_vec)?,
                 );
             }
             Element::Add => {
                 let mut acc: Number = Number::Rational(0, 1);
 
                 for x in &self.children {
-                    acc = (*x.borrow_mut()).evaluate(var_value.clone())? + acc
+                    acc = (*x.borrow_mut()).evaluate(var_vec.clone())? + acc
                 }
 
                 Ok(acc)
             }
-            Element::Sub => {
-                match self.children.len() {
-                    1 => {
-                        //deprecated case
-                        match (*self.children[0].borrow_mut()).evaluate(var_value)? {
-                            Number::Real(x) => Ok(Number::new_real(-x)),
-                            Number::Rational(n, d) => {
-                                let a: Number = match Number::new_rational(-n, d) {
-                                    Ok(v) => v,
-                                    Err(_) => {
-                                        return Err(String::from(
-                                            "Division by 0 is not possible. \n",
-                                        ))
-                                    }
-                                };
-                                Ok(a)
-                            }
-                        }
-                    }
-                    2 => Ok(
-                        (*self.children[0].borrow_mut()).evaluate(var_value.clone())?
-                            - (*self.children[1].borrow_mut()).evaluate(var_value)?,
-                    ),
-                    _ => Err(format!(
-                        "Substraction needs exacly 2 arguments, {:?} were provided. \n",
-                        self.children.len()
-                    )),
-                }
-            }
+            Element::Sub => match self.children.len() {
+                2 => Ok((*self.children[0].borrow_mut()).evaluate(var_vec.clone())?
+                    - (*self.children[1].borrow_mut()).evaluate(var_vec)?),
+                _ => Err(format!(
+                    "Substraction needs exacly 2 arguments, {:?} were provided. \n",
+                    self.children.len()
+                )),
+            },
             Element::Mult => {
-                if self.children.len() < 2 {
+                if self.children.len() != 2 {
                     return Err(format!(
-                        "Multiplication needs at least 2 arguments, {:?} were provided. \n",
+                        "Multiplication needs exacly 2 arguments, {:?} were provided. \n",
                         self.children.len()
                     ));
                 }
@@ -2881,7 +2854,7 @@ impl Evaluable for AST {
                 let mut acc: Number = Number::Rational(1, 1);
 
                 for x in &self.children {
-                    acc = (*x.borrow_mut()).evaluate(var_value.clone())? * acc;
+                    acc = (*x.borrow_mut()).evaluate(var_vec.clone())? * acc;
                 }
 
                 Ok(acc)
@@ -2896,10 +2869,10 @@ impl Evaluable for AST {
 
                 let inverse: Number = crate::functions::Functions::find_and_evaluate(
                     FnIdentifier::Inv,
-                    (*self.children[1].borrow_mut()).evaluate(var_value.clone())?,
+                    (*self.children[1].borrow_mut()).evaluate(var_vec.clone())?,
                 )?;
 
-                Ok((*self.children[0].borrow_mut()).evaluate(var_value)? * inverse)
+                Ok((*self.children[0].borrow_mut()).evaluate(var_vec)? * inverse)
             }
             Element::Exp => {
                 if self.children.len() != 2 {
@@ -2910,8 +2883,8 @@ impl Evaluable for AST {
                 }
 
                 Ok((*self.children[0].borrow_mut())
-                    .evaluate(var_value.clone())?
-                    .raise_exponent((*self.children[1].borrow_mut()).evaluate(var_value)?)?)
+                    .evaluate(var_vec.clone())?
+                    .raise_exponent((*self.children[1].borrow_mut()).evaluate(var_vec)?)?)
             }
             Element::Fact => {
                 if self.children.len() != 1 {
@@ -2921,7 +2894,7 @@ impl Evaluable for AST {
                     ));
                 }
 
-                let x: Number = (*self.children[0].borrow_mut()).evaluate(var_value.clone())?;
+                let x: Number = (*self.children[0].borrow_mut()).evaluate(var_vec.clone())?;
                 if !x.is_integer() {
                     return Err(format!(
                         "The factorial only takes integer inputs. Number found: {:?}\n",
@@ -2958,8 +2931,8 @@ impl Evaluable for AST {
                     ));
                 }
 
-                let x: Number = (*self.children[0].borrow_mut()).evaluate(var_value.clone())?;
-                let y: Number = (*self.children[1].borrow_mut()).evaluate(var_value)?;
+                let x: Number = (*self.children[0].borrow_mut()).evaluate(var_vec.clone())?;
+                let y: Number = (*self.children[1].borrow_mut()).evaluate(var_vec)?;
 
                 if x.is_integer() && y.is_integer() {
                     let x_int: i64 = match x {
@@ -2989,7 +2962,7 @@ impl Evaluable for AST {
                         self.children.len()
                     ));
                 }
-                let mut ret: Number = (*self.children[0].borrow_mut()).evaluate(var_value)?;
+                let mut ret: Number = (*self.children[0].borrow_mut()).evaluate(var_vec)?;
 
                 match &mut ret {
                     Number::Real(r) => *r = -*r,
@@ -2998,11 +2971,12 @@ impl Evaluable for AST {
 
                 Ok(ret)
             }
-            Element::Var => match var_value {
-                Some(varibale_value) => Ok(varibale_value),
-                None => Err(String::from(
-                    "Attempt to evaluate a variable without given value. ",
-                )),
+            Element::Var(i) => match var_vec.iter().find(|&x| x.0 == *i) {
+                Some((_c, value)) => Ok(value.clone()),
+                None => Err(
+                    "Expression contains a variable for wich the value has been not specified"
+                        .to_string(),
+                ),
             },
             Element::None => Err(String::from("None reached. ")),
         }
@@ -3022,6 +2996,72 @@ impl Number {
             return Err(());
         }
         return Ok(Number::Rational(num, den));
+    }
+
+    /// Parses the given number and returns a [Number] if it succeds.
+    ///
+    /// The input string can be in the form `a` or `a/b` where a and b
+    /// can be integers or floats. Note that if `b == 0`, an error will
+    /// be returned.
+    pub fn parse_number(input: &str) -> Result<Self, String> {
+        let mut str_number: String = String::new();
+        let mut str_number_denominator: String = String::new();
+
+        let mut found_division: bool = false;
+
+        for c in input.chars() {
+            if c == '/' {
+                found_division = true;
+                continue;
+            }
+
+            if found_division {
+                str_number_denominator.push(c);
+            } else {
+                str_number.push(c);
+            }
+        }
+
+        // We will check iw we can parse them as i64 and if not as f64. If it fails, we panic
+
+        if found_division {
+            // has the form a/b
+
+            if let Ok(numerator) = str_number.parse::<i64>() {
+                if let Ok(denominator) = str_number_denominator.parse::<i64>() {
+                    if denominator == 0 {
+                        return Err(String::from("Evaluation point contains division by 0. \n"));
+                    }
+
+                    return Ok(Number::Rational(numerator, denominator as u64));
+                } else if let Ok(denominator) = str_number_denominator.parse::<f64>() {
+                    if denominator == 0.0 {
+                        return Err(String::from("Evaluation point contains division by 0. \n"));
+                    }
+                    return Ok(Number::Real(numerator as f64 / denominator));
+                }
+            } else if let Ok(numerator) = str_number.parse::<f64>() {
+                if let Ok(denominator) = str_number_denominator.parse::<f64>() {
+                    if denominator == 0.0 {
+                        return Err(String::from("Evaluation point contains division by 0. \n"));
+                    }
+                    return Ok(Number::Real(numerator / denominator));
+                }
+            }
+        } else {
+            // is just a single number
+
+            if let Ok(number) = str_number.parse::<i64>() {
+                return Ok(Number::Rational(number, 1 as u64));
+            } else if let Ok(number) = str_number.parse::<f64>() {
+                return Ok(Number::Real(number));
+            }
+        }
+
+        // at some point both the cast to i64 and f64 failed, so it's not a valid number
+        return Err(String::from(
+            "Invalid number passed as evaluation point. \n",
+        ));
     }
 
     /// Takes x as input and tries to see if it can be expressed as a/b without too much error.
@@ -3780,7 +3820,7 @@ impl fmt::Debug for Number {
 
 impl Evaluable for Number {
     /// Returns the [Number] itself.
-    fn evaluate(&self, _var_value: Option<Number>) -> Result<Number, String> {
+    fn evaluate(&self, _var_value: Vec<(char, Number)>) -> Result<Number, String> {
         return Ok(self.clone());
     }
 }

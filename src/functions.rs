@@ -552,7 +552,7 @@ impl Functions {
     /// The current [AST] node must have the [AST::value] with the variant [Element::Function]
     /// with a regognized function. Some parts of the expression may be evaluated, therefore, if the expression
     /// is invalid, the function may return an error.
-    pub fn func_derive(input: &AST) -> Result<AST, String> {
+    pub fn func_derive(input: &AST, diferentiation_variable: char) -> Result<AST, String> {
         let function_name: FnIdentifier = if let Element::Function(iden) = &input.value {
             iden.to_owned()
         } else {
@@ -575,7 +575,7 @@ impl Functions {
                 // 1/f => -f'/(f^2)
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // f^2
                 let f_sq: AST = AST {
@@ -608,7 +608,7 @@ impl Functions {
                 // sqrt(f) = f'/(2*sqrt(f))
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 //2*sqrt(f)
                 let f2: AST = AST {
@@ -629,7 +629,7 @@ impl Functions {
                 // sin(f) => cos(f)*f'
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // cos(f)
                 let mut cos: AST = input.deep_copy();
@@ -645,7 +645,7 @@ impl Functions {
                 // cos(f) => -sin(f)*f'
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // sin(f)
                 let mut sin: AST = input.deep_copy();
@@ -670,7 +670,7 @@ impl Functions {
                 // tan(f) => (1 + tan(f)^2) * f'
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // tan(f)^2
                 let tan_sq: AST = AST {
@@ -704,7 +704,7 @@ impl Functions {
                 // arcsin(f) => f'/sqrt(1-f^2)
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // f^2
                 let f_sq: AST = AST {
@@ -740,7 +740,7 @@ impl Functions {
                 // arccos(f) => -f'/sqrt(1-f^2)
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // f^2
                 let f_sq: AST = AST {
@@ -781,7 +781,7 @@ impl Functions {
                 // arctan(f) => f'/1+f^2
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // f^2
                 let f_sq: AST = AST {
@@ -813,7 +813,7 @@ impl Functions {
                 // exp(f) => exp(f) * f'
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // exp(f) * f'
                 AST {
@@ -828,7 +828,7 @@ impl Functions {
                 // ln(f) => f'/f
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // f'/f
                 AST {
@@ -840,7 +840,7 @@ impl Functions {
                 // |f| =>  f / |f| * f'
 
                 // f'
-                let der: AST = input.children[0].borrow().derive()?;
+                let der: AST = input.children[0].borrow().derive(diferentiation_variable)?;
 
                 // f
                 let inner: Rc<RefCell<AST>> = Rc::clone(&input.children[0]);

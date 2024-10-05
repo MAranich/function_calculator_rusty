@@ -145,6 +145,38 @@ Gamma (`gamma(x)`)
 
 "; 
 
+/*
+    Addition (`+`)
+    Substraction (`-`)
+    Multiplication (`*`)\
+    Division (`/`)
+    Modulus (`%`)
+    Exponentiation (`^` or `**`)
+    Factorial (`!`)
+    Square root (`sqrt(x)`)
+    Sinus (`sin(x)`)
+    Cosinus (`cos(x)`)
+    Tangent  (`tan(x)`)
+    Arcsinus (`arcsin(x)`)
+    Arccosinus (`arccos(x)`)
+    Arctangent (`arctan(x)`)
+    Exponential (`exp(x)`, recommended over `e^x`)
+    Natural logarithm (`ln(x)`)
+    Absolute value (`abs(x)`)
+    Floor function (`floor(x)`)
+    Ceil function (`ceil(x)`)
+    Random  (Uniform [0, 1]) (`rand(x)`)
+    Gamma (`gamma(x)`)
+
+    //! 15) Exponential                     (using `exp(x)`)
+    //! 16) Natural logarithm               (using `ln(x)`)
+    //! 17) Absolute value                  (using `abs(x)`)
+    //! 18) Floor function                  (using `floor(x)`)
+    //! 19) Ceil function                   (using `ceil(x)`)
+    //! 20) Random  (Uniform [0, 1])        (using `rand(x)`)
+    //! 21) Gamma                           (using `gamma(x)`)
+*/
+
 fn main() {
     let matched: clap::ArgMatches = command!()
         .about("\n\n\nThis program allows evaluating numerical expressions, evaluating a given function and deriving functions. ")
@@ -153,15 +185,21 @@ fn main() {
                 .required(true)
                 .help("The expression or function to evaluate or derive. ")
         ).arg(
-            Arg::new("evaluation_point")
+            Arg::new("evaluation_points")
                 .short('e')
                 .long("evaluate")
-                .help("If set, will evaluate the expression at the given point. ")
+                .action(ArgAction::Append)
+                .help("If set, will evaluate the expression at the given point for the given variable. Must have the form -e <var>=<num>   ")
         ).arg(
             Arg::new("derives")
                 .short('d')
                 .long("derive")
                 .help("Derivates the expression the desired amount of times. Must be a positive number. ")
+        ).arg(
+            Arg::new("derive_var")
+                .short('D')
+                .long("dervar")
+                .help("The variable wich all the derivartves will be taken in respect to. Deafult is 'x' unless overiden. ")
         ).arg(
             Arg::new("raw")
                 .short('r')
@@ -183,54 +221,37 @@ fn main() {
         ).after_help(DESCRIPTION)
         
         .get_matches();
-/*
-Addition (`-`)
-Substraction (`-`)
-Multiplication (`*`)\
-Division (`/`)
-Modulus (`%`)
-Exponentiation (`^` or `**`)
-Factorial (`!`)
-Square root (`sqrt(x)`)
-Sinus (`sin(x)`)
-Cosinus (`cos(x)`)
-Tangent  (`tan(x)`)
-Arcsinus (`arcsin(x)`)
-Arccosinus (`arccos(x)`)
-Arctangent (`arctan(x)`)
-Exponential (`exp(x)`, recommended over `e^x`)
-Natural logarithm (`ln(x)`)
-Absolute value (`abs(x)`)
-Floor function (`floor(x)`)
-Ceil function (`ceil(x)`)
-Random  (Uniform [0, 1]) (`rand(x)`)
-Gamma (`gamma(x)`)
 
-//! 15) Exponential                     (using `exp(x)`)
-//! 16) Natural logarithm               (using `ln(x)`)
-//! 17) Absolute value                  (using `abs(x)`)
-//! 18) Floor function                  (using `floor(x)`)
-//! 19) Ceil function                   (using `ceil(x)`)
-//! 20) Random  (Uniform [0, 1])        (using `rand(x)`)
-//! 21) Gamma                           (using `gamma(x)`)
-         */
-    let evaluation_point_str: Option<&String> = matched.get_one::<String>("evaluation_point");
 
-    let evaluation_point: Option<Number> = match evaluation_point_str {
-        Some(ev_pt_str) => match parse_evaluation_point(ev_pt_str) {
-            Ok(v) => Some(v),
-            Err(msg) => panic!("{}", msg),
-        },
-        None => None,
-    };
+    
+    
 
-    let number_of_derives: Option<u16> =
-        matched
-            .get_one::<String>("derives")
+
+
+    let evaluation_vec: Vec<(char, Number)> = matched
+        .get_many::<String>("evaluation_points")
+        .unwrap_or_default()
+        .map(|v| {
+            let eval_result: Result<(char, Number), String> = parse_evaluation_args(v.as_str()); 
+            match eval_result {
+                Ok(x) => x,
+                Err(e) => panic!("{}", e),
+            }
+        
+        })
+        .collect::<Vec<(char, Number)>>() ;
+
+    // Just takes the 1st char of the string
+    let diferentiation_variable: char = matched.get_one::<String>("derive_var").map(|s|s.to_owned().chars().next().unwrap()).unwrap_or('x'); 
+
+
+    let number_of_derives: u16 =
+        matched.get_one::<String>("derives")
             .map(|n| match n.parse::<u16>() {
                 Ok(v) => v,
                 Err(e) => panic!("{}", e),
-            });
+            }).unwrap_or(0);
+
 
     let verbose_flag: bool = matched.get_flag("verbose");
 
@@ -275,7 +296,7 @@ Gamma (`gamma(x)`)
                 println!("Expanding the derivatives in the expression: \n"); 
             }
 
-            match original_ast.execute_derives(false, verbose_flag) {
+            match original_ast.execute_derives(diferentiation_variable, false, verbose_flag) {
                 Ok((v, f)) => {
                     assert!(f == false);
                     v
@@ -303,15 +324,14 @@ Gamma (`gamma(x)`)
         expanded_ders
     };
 
-    if let Some(num_of_derives) = number_of_derives { 
-        if verbose_flag {
-            println!("\tDerivating expression {} times: \n", num_of_derives); 
-        }
-        for _i in 0..num_of_derives {
-            ast = match ast.full_derive(simplify_output_flag, verbose_flag) {
-                Ok(new_ast) => new_ast,
-                Err(msg) => panic!("{}", msg),
-            }
+    if verbose_flag && number_of_derives != 0 {
+        println!("\tDerivating expression {} times: \n", number_of_derives); 
+    }
+
+    for _i in 0..number_of_derives {
+        ast = match ast.full_derive(diferentiation_variable, simplify_output_flag, verbose_flag) {
+            Ok(new_ast) => new_ast,
+            Err(msg) => panic!("{}", msg),
         }
     }
 
@@ -322,8 +342,8 @@ Gamma (`gamma(x)`)
         println!("\n\n{}", ast.to_string());
     }
 
-    if let Some(eval_pt) = evaluation_point {
-        let result: Number = match ast.evaluate(Some(eval_pt)) {
+    if evaluation_vec.len() != 0 {
+        let result: Number = match ast.evaluate(evaluation_vec) {
             Ok(v) => v,
             Err(msg) => panic!("{}", msg),
         };
