@@ -795,7 +795,6 @@ impl SRA {
                 } else {
                     Element::Function(FnIdentifier::from_str(lexemme)?)
                 }
-
             }
             TokenClass::SpecialChar => Element::None,
             TokenClass::NTStart => Element::None,

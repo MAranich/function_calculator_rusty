@@ -129,7 +129,7 @@ pub fn setup_dfas() -> Vec<Rc<DFA>> {
     return dfa_vec;
 }
 
-/// Prepares the [InstanceDFA]. 
+/// Prepares the [InstanceDFA].
 pub fn setup_idfas(
     dfas: &Vec<Rc<DFA>>,
     mut associated_class: Vec<Option<TokenClass>>,
@@ -147,10 +147,10 @@ pub fn setup_idfas(
     return ret;
 }
 
-/// Returns true if parenthesis are used correcly. 
-/// 
-/// The types of parenthesis are `()`, `{}` and `[]`. Each parenthesis must 
-/// be matched with one of the same corresponding type. 
+/// Returns true if parenthesis are used correcly.
+///
+/// The types of parenthesis are `()`, `{}` and `[]`. Each parenthesis must
+/// be matched with one of the same corresponding type.
 pub fn correct_parenthesis(token_list: &Vec<Token>) -> bool {
     let open_parenthesis: TokenModel;
     let close_parenthesis: TokenModel;
@@ -231,33 +231,32 @@ pub fn correct_parenthesis(token_list: &Vec<Token>) -> bool {
     return stack.len() == 0;
 }
 
-
-/// Returns preprocessing parser rules. 
-/// 
+/// Returns preprocessing parser rules.
+///
 /// The aim if this automata is not to parse anithing, but simplify the
 /// redundant expressions if needed. After parsing the input the reduced
 /// result will be on the stack.
-/// 
+///
 /// Rules for a sra to simplify things:
-/// 
+///
 /// > 1:&emsp;&emsp;`+`&emsp;-> `++`
-/// 
+///
 /// > 2:&emsp;&emsp;`-`&emsp;-> `+-`
-/// 
+///
 /// > 3:&emsp;&emsp;`-`&emsp;-> `-+`
-/// 
+///
 /// > 4:&emsp;&emsp;`+`&emsp;-> `--`
-/// 
+///
 /// > 5:&emsp;&emsp;`**`&nbsp;&nbsp;&nbsp;-> `^`
-/// 
+///
 /// > 6:&emsp;&emsp;`[`&emsp;-> `(`
-/// 
+///
 /// > 7:&emsp;&emsp;`]`&emsp;-> `)`
-/// 
+///
 /// > 8:&emsp;&emsp;`{`&emsp;-> `(`
-/// 
+///
 /// > 9:&emsp;&emsp;`}`&emsp;-> `)`
-/// 
+///
 pub fn get_pre_rules() -> Vec<Rule> {
     /*
     Rules for a sra to simplify things:
@@ -428,34 +427,34 @@ pub fn get_pre_rules() -> Vec<Rule> {
     ];
 }
 
-/// Get the rules of the language. 
+/// Get the rules of the language.
 ///
 /// > 1:&emsp;`S` -> `S S +`
-/// 
+///
 /// > 2:&emsp;`S` -> `S S -`
-/// 
+///
 /// > 3:&emsp;`S` -> `S S *`
-/// 
+///
 /// > 4:&emsp;`S` -> `S S /`
-/// 
+///
 /// > 5:&emsp;`S` -> `S S ^`
-/// 
+///
 /// > 6:&emsp;`S` -> `S !`
-/// 
+///
 /// > 7:&emsp;`S` -> `S S %`
-/// 
+///
 /// > 8:&emsp;`S` -> `S iden`
-/// 
+///
 /// > 9:&emsp;`S` -> `num`
-/// 
-/// REMOVED: 10: `S` -> `S -` 
-/// 
+///
+/// REMOVED: 10: `S` -> `S -`
+///
 /// > 11: `S` -> `S -- `
-/// 
+///
 /// > 12: `S` -> `var`
 ///
 /// Order: 9, 8, 1, 2, 11, 3, 4, 5, 6, 7, 12
-/// 
+///
 /// Use revers polish notation to avoid ambiguity:
 /// Source: [link](https://en.wikipedia.org/wiki/Reverse_Polish_notation)
 pub fn get_rules() -> Vec<Rule> {
@@ -472,10 +471,10 @@ pub fn get_rules() -> Vec<Rule> {
         7:  S -> S S %
         8:  S -> S iden
         9:  S -> num
-        REMOVED: 10: S -> S - 
-        11: S -> S -- 
+        REMOVED: 10: S -> S -
+        11: S -> S --
         12: S -> var
-        
+
         Order: 9, 8, 1, 2, 11, 3, 4, 5, 6, 7,
         Old Order: 9, 8, 1, 2, 10, 11, 3, 4, 5, 6, 7,
 
@@ -635,7 +634,7 @@ pub fn get_rules() -> Vec<Rule> {
         }
     };
 
-    /* 
+    /*
     let rule_10: Rule = {
         let t: Token = Token::new(None, TokenClass::NTStart);
 
@@ -659,7 +658,6 @@ pub fn get_rules() -> Vec<Rule> {
 
         let t1: Token = Token::new(None, TokenClass::NTStart);
         let t2: Token = Token::new(Some("--".to_string()), TokenClass::Operator);
-
 
         let _cons: TokenModel = TokenModel::from_token(t, false);
 
@@ -686,6 +684,6 @@ pub fn get_rules() -> Vec<Rule> {
     };
 
     return vec![
-        rule_9, rule_8, rule_1, rule_2, rule_11, rule_3, rule_4, rule_5, rule_6, rule_7, rule_12
+        rule_9, rule_8, rule_1, rule_2, rule_11, rule_3, rule_4, rule_5, rule_6, rule_7, rule_12,
     ];
 }

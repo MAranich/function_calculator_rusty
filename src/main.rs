@@ -223,10 +223,6 @@ fn main() {
         .get_matches();
 
 
-    
-    
-
-
 
     let evaluation_vec: Vec<(char, Number)> = matched
         .get_many::<String>("evaluation_points")
@@ -339,23 +335,37 @@ fn main() {
         println!("Final AST: \n\n\t{}\n\n", ast.to_string());
     } else {
         // we need to print the final result anyway
-        println!("\n\n{}", ast.to_string());
+
+        if evaluation_vec.len() != 0 {
+            print!("f("); 
+            let (last_eval, evaluation_vec_front): (&(char, Number), &[(char, Number)]) = 
+                evaluation_vec.split_last().unwrap(); 
+            
+            for (var_iden, value) in evaluation_vec_front {
+                print!("{}={}, ", var_iden, value.as_str()); 
+            }
+
+            print!("{}={}", last_eval.0, last_eval.1.as_str()); 
+
+            print!(") = "); 
+        }
+
+        print!("{}", ast.to_string());
     }
 
     if evaluation_vec.len() != 0 {
         let result: Number = match ast.evaluate(evaluation_vec) {
             Ok(v) => v,
-            Err(msg) => panic!("{}", msg),
+            Err(msg) => panic!("\n{}\n", msg),
         };
         if verbose_flag {
             println!("The function was evaluated to: {}\n", result.as_str());
         } else {
             // We need to print what we were asked for. 
-            println!("{}\n", result.as_str());
+            print!(" = {}", result.as_str());
         }
     }
 
-    print!("\n\n");
 }
 
 /*

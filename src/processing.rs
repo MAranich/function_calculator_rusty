@@ -402,23 +402,6 @@ pub fn negation_substituter(input: Vec<Token>) -> Vec<Token> {
 
 /// Substitute identifiers of 1 char by a [Token] with the variant [TokenClass::Variable].
 pub fn variable_substituter(input: Vec<Token>) -> Vec<Token> {
-    //let mut ret: Vec<Token> = Vec::with_capacity(input.len());
-    let variable_raw_model: TokenModel = TokenModel {
-        token: Token {
-            lexeme: None,
-            class: TokenClass::Identifier,
-        },
-        compare_lexemme: true,
-    };
-
-    let variable_model: TokenModel = TokenModel {
-        token: Token {
-            lexeme: None,
-            class: TokenClass::Variable,
-        },
-        compare_lexemme: false,
-    };
-
     let ret: Vec<Token> = input
         .into_iter()
         .map(|tok| 'clos: {
@@ -519,16 +502,12 @@ pub fn generate_ast(
         }
     }
 
-    println!("1: {:#?}\n\n", token_list); 
-
     // remove redundancy:
     {
         let num_tokens_with_redundancy: usize = token_list.len();
         let mut redundancy_remover: SRA = SRA::new(setup::get_pre_rules());
 
-        let i = 0; 
         for tok in token_list {
-            println!("{i}\n"); 
             redundancy_remover.advance(tok)?;
         }
 
@@ -544,15 +523,11 @@ pub fn generate_ast(
         }
     }
 
-    println!("2: {:#?}\n\n", token_list); 
-
-
     // negation tokens:
     token_list = negation_substituter(token_list);
 
     // variable detection
     token_list = variable_substituter(token_list);
-
 
     // transform to RPN:
     {
@@ -660,5 +635,3 @@ pub fn parse_evaluation_args(input: &str) -> Result<(char, Number), String> {
 
     return Ok((variable_identifier, parsed_num));
 }
-
-

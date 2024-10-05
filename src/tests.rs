@@ -641,9 +641,9 @@ fn derive_test() {
         let arccos: AST = AST {
             value: Element::Function(functions::FnIdentifier::Arccos),
             children: vec![get_ptr(AST {
-            value: Element::Var('x'),
-            children: vec![],
-        })],
+                value: Element::Var('x'),
+                children: vec![],
+            })],
         };
 
         let arccos_10: AST = AST {
@@ -656,10 +656,13 @@ fn derive_test() {
 
         AST {
             value: Element::Mult,
-            children: vec![get_ptr(AST {
-            value: Element::Var('x'),
-            children: vec![],
-        }), get_ptr(arccos_10)],
+            children: vec![
+                get_ptr(AST {
+                    value: Element::Var('x'),
+                    children: vec![],
+                }),
+                get_ptr(arccos_10),
+            ],
         }
     }
     .insert_derive();
