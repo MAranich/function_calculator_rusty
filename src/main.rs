@@ -33,7 +33,13 @@
 //!
 //! + All the functions can be combined and composed in any way as long as they are
 //! mathematically correct and fullfill the syntax requirments.
-//!
+//! 
+//! - Use `der(x)` to calculate the derivative of the inside. 
+//! 
+//! - Alternatively, use the flag `-d <n>` to derivate the provided functon `<n>` times. 
+//! 
+//! - Use `-e x=<y>` to evaluate the function at the input `<y>`. 
+//! 
 //! + Some operations have priority over others, such as multiplication over
 //! addition. That means that `"2+5*3"` will be evaluated as `"2+(5*3)"`. To overwrite
 //! the order, parenthesis can be used `()`.
@@ -115,6 +121,7 @@ const DESCRIPTION: &'static str = "
  - Remember that a [logarithm](https://en.wikipedia.org/wiki/Logarithm#Change_of_base) in any base `b` can be expressed as `log_b(x) = (ln(x)/ln(b))` .
 
 \tVaid operations: 
+
 Addition (`+`)
 Substraction (`-`)
 Multiplication (`*`)
@@ -141,7 +148,9 @@ Gamma (`gamma(x)`)
 
  - Use `der(x)` to calculate the derivative of the inside. 
 
+ - Alternatively, use the flag `-d <n>` to derivate the provided functon `<n>` times. 
 
+ - Use `-e x=<y>` to evaluate the function at the input `<y>`. 
 
 "; 
 
