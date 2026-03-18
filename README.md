@@ -34,6 +34,10 @@ This project supports the following operations:
 + All the functions can be combined and composed in any way as long as they are
 mathematically correct and fullfill the syntax requirments.
 
+ - Alternatively, use the flag `-d <n>` to derivate the provided functon `<n>` times. 
+
+ - Use `-e x=<y>` to evaluate the function at the input `<y>`. 
+
 + Some operations have priority over others, such as multiplication over
 addition. That means that `"2+5*3"` will be evaluated as `"2+(5*3)"`. To overwrite
 the order, parenthesis can be used `()`.
