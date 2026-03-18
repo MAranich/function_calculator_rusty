@@ -36,7 +36,7 @@
 //!
 //! + Some operations have priority over others, such as multiplication over
 //! addition. That means that `"2+5*3"` will be evaluated as `"2+(5*3)"`. To overwrite
-//! the order parenthesis can be used `()`.
+//! the order, parenthesis can be used `()`.
 //!
 //! + All the trigonometric functions work with radians. In order to use degrees, multiply your
 //! value by `DEG2RAD`, for example: `sin(90*DEG2RAD)`
