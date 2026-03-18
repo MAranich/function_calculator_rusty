@@ -2,7 +2,6 @@ use core::f64;
 use std::{
     cell::RefCell,
     f64::consts::{E, PI},
-    mem::transmute,
     rc::Rc,
 };
 
@@ -85,7 +84,7 @@ pub const LIST_CONST_VAUE_STR: [(&'static str, Number); 6] = [
     (CONST_STR_RAD2DEG, Number::Real(180 as f64 / PI)),
     (
         CONST_STR_PHI,
-        Number::Real(unsafe { transmute::<u64, f64>(0x3ff9e3779b97f4a8) }),
+        Number::Real( f64::from_bits(0x3ff9e3779b97f4a8)),
     ),
     (CONST_STR_E, Number::Real(E)),
     (CONST_STR_TAU, Number::Real(PI * 2 as f64)),

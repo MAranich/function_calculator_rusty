@@ -1660,10 +1660,12 @@ impl AST {
                 let simplified: Result<AST, String> = child.borrow().deep_copy().simplify_step();
                 break 'clos simplified;
 
+                /*
                 match simplified {
                     Ok(ast) => ast.join_terms(),
                     Err(e) => Err(e),
                 }
+                */
             })
             .collect();
 

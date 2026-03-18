@@ -354,12 +354,10 @@ fn main() {
                 print!("{}={}, ", var_iden, value.as_str()); 
             }
 
-            print!("{}={}", last_eval.0, last_eval.1.as_str()); 
-
-            print!(") = "); 
+            print!("{}={}) = ", last_eval.0, last_eval.1.as_str()); 
         }
 
-        print!("{}", ast.to_string());
+        print!("{}\n", ast.to_string());
     }
 
     if evaluation_vec.len() != 0 {
